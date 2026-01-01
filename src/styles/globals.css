@@ -1,0 +1,116 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    @apply bg-background text-text-primary;
+    font-feature-settings: 'tnum' on, 'lnum' on; /* Tabular numbers */
+  }
+
+  body {
+    @apply antialiased;
+  }
+
+  /* Scrollbar styling */
+  ::-webkit-scrollbar {
+    @apply w-2 h-2;
+  }
+
+  ::-webkit-scrollbar-track {
+    @apply bg-background;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    @apply bg-border rounded-full;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-text-muted;
+  }
+
+  /* Remove input styling defaults */
+  input[type='number']::-webkit-inner-spin-button,
+  input[type='number']::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+
+  input[type='number'] {
+    -moz-appearance: textfield;
+  }
+}
+
+@layer components {
+  .btn {
+    @apply px-4 py-2 rounded font-medium transition-colors duration-150;
+    @apply focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-background;
+  }
+
+  .btn-primary {
+    @apply bg-accent text-white hover:bg-accent-hover focus:ring-accent;
+  }
+
+  .btn-secondary {
+    @apply bg-surface text-text-primary border border-border;
+    @apply hover:bg-surface-hover focus:ring-border;
+  }
+
+  .btn-danger {
+    @apply bg-danger text-white hover:bg-red-600 focus:ring-danger;
+  }
+
+  .btn-ghost {
+    @apply bg-transparent text-text-secondary hover:bg-surface-hover hover:text-text-primary;
+  }
+
+  .input {
+    @apply w-full px-3 py-2 bg-surface border border-border rounded;
+    @apply text-text-primary placeholder-text-muted;
+    @apply focus:outline-none focus:border-border-focus focus:ring-1 focus:ring-border-focus;
+    @apply transition-colors duration-150;
+  }
+
+  .select {
+    @apply input appearance-none cursor-pointer;
+    @apply bg-no-repeat bg-right pr-10;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3E%3Cpath stroke='%23a0a0a0' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3E%3C/svg%3E");
+    background-position: right 0.5rem center;
+    background-size: 1.5em 1.5em;
+  }
+
+  .label {
+    @apply block text-sm font-medium text-text-secondary mb-1;
+  }
+
+  .card {
+    @apply bg-surface border border-border rounded-lg;
+  }
+
+  .table-row {
+    @apply border-b border-border hover:bg-surface-hover transition-colors;
+  }
+
+  .table-cell {
+    @apply px-4 py-3 text-sm;
+  }
+
+  .table-header {
+    @apply px-4 py-3 text-xs font-medium text-text-secondary uppercase tracking-wide;
+    @apply bg-surface sticky top-0;
+  }
+}
+
+@layer utilities {
+  .text-positive {
+    @apply text-success;
+  }
+
+  .text-negative {
+    @apply text-danger;
+  }
+
+  .font-tabular {
+    font-variant-numeric: tabular-nums;
+  }
+}

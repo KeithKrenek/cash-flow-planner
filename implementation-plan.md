@@ -18,7 +18,8 @@
 12. [CSV Parser Implementation](#12-csv-parser-implementation)
 13. [Error Handling Patterns](#13-error-handling-patterns)
 14. [Performance Considerations](#14-performance-considerations)
-15. [Deployment Configuration](#15-deployment-configuration)
+15. [Testing Strategy](#15-testing-strategy)
+16. [Deployment Configuration](#16-deployment-configuration)
 
 ---
 
@@ -52,7 +53,11 @@ Recharts is built specifically for React, uses declarative components, and handl
 
 date-fns is tree-shakeable (only import what you use), immutable by default, and uses native Date objects. Moment is deprecated and large. Luxon is excellent but heavier than needed for our use case.
 
-### 1.7 Why TanStack Query
+### 1.7 Why Vitest for Testing
+
+Vitest is a Vite-native test runner that shares configuration with our build tool. It provides Jest-compatible APIs, fast execution via native ESM support, and excellent TypeScript integration. For testing the projection engine and recurrence logic, unit tests are essential.
+
+### 1.8 Why TanStack Query
 
 TanStack Query (formerly React Query) provides caching, background refetching, optimistic updates, and automatic retry logic. This eliminates the need to build custom data fetching infrastructure and ensures the UI stays synchronized with database state.
 
@@ -67,6 +72,7 @@ cashflow-tracker/
 ├── tsconfig.json
 ├── tsconfig.node.json
 ├── vite.config.ts
+├── vitest.config.ts              # Test configuration
 ├── tailwind.config.js
 ├── postcss.config.js
 ├── .env.local                    # Local environment variables (git-ignored)
@@ -74,9 +80,19 @@ cashflow-tracker/
 ├── .gitignore
 ├── public/
 │   └── favicon.svg
+├── tests/                        # Test files
+│   ├── setup.ts                  # Test setup and global mocks
+│   ├── lib/
+│   │   ├── recurrence.test.ts    # Recurrence expansion tests
+│   │   ├── projection-engine.test.ts  # Projection calculation tests
+│   │   ├── csv-parser.test.ts    # CSV parsing tests
+│   │   └── date-utils.test.ts    # Date utility tests
+│   └── components/
+│       └── EditableCell.test.tsx # Component tests
 └── src/
     ├── main.tsx                  # Application entry point
-    ├── App.tsx                   # Root component with providers
+    ├── App.tsx                   # Root component with providers and router
+    ├── router.tsx                # React Router configuration
     ├── vite-env.d.ts             # Vite type declarations
     │
     ├── types/
@@ -91,9 +107,13 @@ cashflow-tracker/
     │   ├── utils.ts              # General utility functions
     │   ├── date-utils.ts         # Date manipulation helpers
     │   ├── format-utils.ts       # Number/currency formatting
+    │   ├── amount-utils.ts       # Safe decimal arithmetic for money
+    │   ├── sanitize.ts           # XSS sanitization for user input
     │   ├── recurrence.ts         # Recurrence expansion logic
     │   ├── projection-engine.ts  # Core projection calculations
-    │   └── csv-parser.ts         # CSV import parsing/validation
+    │   ├── csv-parser.ts         # CSV import parsing/validation
+    │   ├── errors.ts             # Error handling utilities
+    │   └── validation.ts         # Form validation utilities
     │
     ├── api/
     │   ├── accounts.ts           # Account CRUD operations
@@ -108,12 +128,15 @@ cashflow-tracker/
     │   ├── useTransactions.ts    # Transaction data fetching/mutations
     │   ├── useSettings.ts        # User settings management
     │   ├── useProjection.ts      # Computed projection from raw data
-    │   └── useDebounce.ts        # Input debouncing utility
+    │   ├── useDebouncedSave.ts   # Debounced save for inline editing
+    │   └── useDebounce.ts        # Generic debouncing utility
     │
     ├── context/
     │   └── AuthContext.tsx       # Authentication context provider
     │
     ├── components/
+    │   ├── ErrorBoundary.tsx     # React error boundary for graceful failures
+    │   │
     │   ├── ui/                   # Reusable UI primitives
     │   │   ├── Button.tsx
     │   │   ├── Input.tsx
@@ -205,35 +228,45 @@ VITE_SUPABASE_ANON_KEY=actual-anon-key
     "build": "tsc && vite build",
     "preview": "vite preview",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest",
+    "test:run": "vitest run",
+    "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.39.0",
     "@tanstack/react-query": "^5.17.0",
     "@tanstack/react-table": "^8.11.0",
     "date-fns": "^3.2.0",
+    "date-fns-tz": "^3.1.0",
+    "dompurify": "^3.0.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-hot-toast": "^2.4.1",
     "react-router-dom": "^6.21.0",
-    "recharts": "^2.10.0",
-    "uuid": "^9.0.0"
+    "recharts": "^2.10.0"
   },
   "devDependencies": {
+    "@testing-library/jest-dom": "^6.2.0",
+    "@testing-library/react": "^14.1.0",
+    "@testing-library/user-event": "^14.5.0",
+    "@types/dompurify": "^3.0.0",
     "@types/react": "^18.2.0",
     "@types/react-dom": "^18.2.0",
-    "@types/uuid": "^9.0.0",
     "@typescript-eslint/eslint-plugin": "^6.0.0",
     "@typescript-eslint/parser": "^6.0.0",
     "@vitejs/plugin-react": "^4.2.0",
+    "@vitest/coverage-v8": "^1.2.0",
     "autoprefixer": "^10.4.0",
     "eslint": "^8.56.0",
     "eslint-plugin-react-hooks": "^4.6.0",
     "eslint-plugin-react-refresh": "^0.4.0",
+    "jsdom": "^24.0.0",
     "postcss": "^8.4.0",
     "tailwindcss": "^3.4.0",
     "typescript": "^5.3.0",
-    "vite": "^5.0.0"
+    "vite": "^5.0.0",
+    "vitest": "^1.2.0"
   }
 }
 ```
@@ -288,6 +321,114 @@ export default defineConfig({
     sourcemap: true,
   },
 });
+```
+
+### 3.5 Vitest Configuration
+
+**vitest.config.ts:**
+```typescript
+import { defineConfig } from 'vitest/config';
+import react from '@vitejs/plugin-react';
+import path from 'path';
+
+export default defineConfig({
+  plugins: [react()],
+  test: {
+    globals: true,
+    environment: 'jsdom',
+    setupFiles: ['./tests/setup.ts'],
+    include: ['tests/**/*.test.{ts,tsx}'],
+    coverage: {
+      reporter: ['text', 'json', 'html'],
+      exclude: ['node_modules/', 'tests/'],
+    },
+  },
+  resolve: {
+    alias: {
+      '@': path.resolve(__dirname, './src'),
+    },
+  },
+});
+```
+
+### 3.6 Router Configuration
+
+**src/router.tsx:**
+```typescript
+import { createBrowserRouter, Navigate } from 'react-router-dom';
+import { LoginPage } from '@/pages/LoginPage';
+import { SignupPage } from '@/pages/SignupPage';
+import { DashboardPage } from '@/pages/DashboardPage';
+import { AuthGuard } from '@/components/auth/AuthGuard';
+
+export const router = createBrowserRouter([
+  {
+    path: '/',
+    element: <Navigate to="/dashboard" replace />,
+  },
+  {
+    path: '/login',
+    element: <LoginPage />,
+  },
+  {
+    path: '/signup',
+    element: <SignupPage />,
+  },
+  {
+    path: '/dashboard',
+    element: (
+      <AuthGuard>
+        <DashboardPage />
+      </AuthGuard>
+    ),
+  },
+  {
+    path: '*',
+    element: <Navigate to="/dashboard" replace />,
+  },
+]);
+```
+
+### 3.7 App Entry Point
+
+**src/App.tsx:**
+```typescript
+import { RouterProvider } from 'react-router-dom';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { Toaster } from 'react-hot-toast';
+import { AuthProvider } from '@/context/AuthContext';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { router } from './router';
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 1000 * 60,
+      gcTime: 1000 * 60 * 5,
+      retry: 3,
+      retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
+    },
+  },
+});
+
+export function App() {
+  return (
+    <ErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        <AuthProvider>
+          <RouterProvider router={router} />
+          <Toaster
+            position="bottom-right"
+            toastOptions={{
+              className: 'bg-surface text-text-primary border border-border',
+              duration: 4000,
+            }}
+          />
+        </AuthProvider>
+      </QueryClientProvider>
+    </ErrorBoundary>
+  );
+}
 ```
 
 ---
@@ -553,6 +694,15 @@ The `recurrence_rule` JSONB column stores schedule configuration:
 
 ## 5. Type Definitions
 
+### 5.0 Type Exports (src/types/index.ts)
+
+```typescript
+// Re-export all types for convenient imports
+export * from './database';
+export * from './domain';
+export * from './forms';
+```
+
 ### 5.1 Database Types (src/types/database.ts)
 
 ```typescript
@@ -628,7 +778,13 @@ export type SettingsUpdate = Partial<Omit<DbUserSettings, 'id' | 'user_id' | 'cr
 ### 5.2 Domain Types (src/types/domain.ts)
 
 ```typescript
-import { DbAccount, DbBalanceCheckpoint, DbTransaction, DbUserSettings } from './database';
+import {
+  DbAccount,
+  DbBalanceCheckpoint,
+  DbTransaction,
+  DbUserSettings,
+  RecurrenceRule
+} from './database';
 
 // Extended types with computed properties and relationships
 
@@ -661,9 +817,11 @@ export interface TableEntry {
   isRecurring: boolean;
   recurrenceRule: RecurrenceRule | null;
   endDate: Date | null;
-  
-  // Reference to original record for updates
-  originalRecord: BalanceCheckpoint | Transaction;
+
+  // Reference to original database record for updates
+  // Using discriminated union for type safety
+  originalRecord: DbBalanceCheckpoint | DbTransaction;
+  originalType: 'checkpoint' | 'transaction';
 }
 
 // Projection output types
@@ -755,12 +913,31 @@ export interface CSVRow {
   end_date: string;
 }
 
+// Validated transaction ready for insertion (user_id added by parser)
+export interface ValidatedCSVTransaction {
+  user_id: string;
+  account_id: string;
+  description: string;
+  amount: number;
+  category: string | null;
+  date: string;
+  is_recurring: boolean;
+  recurrence_rule: RecurrenceRule | null;
+  end_date: string | null;
+}
+
 export interface CSVParseResult {
-  valid: TransactionInsert[];
+  valid: ValidatedCSVTransaction[];
   errors: Array<{
     row: number;
     data: CSVRow;
     errors: string[];
+  }>;
+  // For user feedback on import
+  duplicateWarnings: Array<{
+    row: number;
+    existingId: string;
+    message: string;
   }>;
 }
 ```
@@ -1405,6 +1582,201 @@ export function useUpdateSettings() {
 
 ## 9. Projection Engine Implementation
 
+### 9.0 Amount Utilities (src/lib/amount-utils.ts)
+
+```typescript
+/**
+ * Safe arithmetic operations for monetary amounts.
+ *
+ * JavaScript floats can produce precision errors (e.g., 0.1 + 0.2 = 0.30000000000000004).
+ * These utilities work around this by operating on cents (integers) internally.
+ *
+ * For a production financial app, consider using a library like decimal.js or big.js.
+ * These utilities are sufficient for our use case where:
+ * - All amounts have at most 2 decimal places
+ * - We don't need arbitrary precision
+ */
+
+/**
+ * Safely add two monetary amounts, avoiding floating-point precision errors.
+ */
+export function addAmounts(a: number, b: number): number {
+  // Convert to cents, add, convert back
+  const aCents = Math.round(a * 100);
+  const bCents = Math.round(b * 100);
+  return (aCents + bCents) / 100;
+}
+
+/**
+ * Safely subtract two monetary amounts.
+ */
+export function subtractAmounts(a: number, b: number): number {
+  const aCents = Math.round(a * 100);
+  const bCents = Math.round(b * 100);
+  return (aCents - bCents) / 100;
+}
+
+/**
+ * Safely multiply a monetary amount by a scalar.
+ */
+export function multiplyAmount(amount: number, multiplier: number): number {
+  const cents = Math.round(amount * 100);
+  return Math.round(cents * multiplier) / 100;
+}
+
+/**
+ * Round a monetary amount to 2 decimal places.
+ */
+export function roundAmount(amount: number): number {
+  return Math.round(amount * 100) / 100;
+}
+
+/**
+ * Parse a string to a monetary amount, returning null if invalid.
+ */
+export function parseAmount(value: string): number | null {
+  const trimmed = value.trim().replace(/[$,]/g, '');
+  const parsed = parseFloat(trimmed);
+  if (isNaN(parsed)) return null;
+  return roundAmount(parsed);
+}
+
+/**
+ * Sum an array of amounts safely.
+ */
+export function sumAmounts(amounts: number[]): number {
+  return amounts.reduce((sum, amount) => addAmounts(sum, amount), 0);
+}
+```
+
+### 9.0.1 Sanitization Utilities (src/lib/sanitize.ts)
+
+```typescript
+import DOMPurify from 'dompurify';
+
+/**
+ * Sanitize user input to prevent XSS attacks.
+ * Used for text that will be rendered in the UI.
+ */
+export function sanitizeText(input: string): string {
+  // DOMPurify removes any HTML/script content
+  return DOMPurify.sanitize(input, {
+    ALLOWED_TAGS: [], // No HTML tags allowed
+    ALLOWED_ATTR: [], // No attributes allowed
+  });
+}
+
+/**
+ * Sanitize a transaction description.
+ * Removes HTML and trims whitespace.
+ */
+export function sanitizeDescription(description: string): string {
+  const sanitized = sanitizeText(description);
+  return sanitized.trim().slice(0, 200); // Enforce max length
+}
+
+/**
+ * Sanitize account name.
+ */
+export function sanitizeAccountName(name: string): string {
+  const sanitized = sanitizeText(name);
+  return sanitized.trim().slice(0, 100);
+}
+
+/**
+ * Sanitize notes field.
+ */
+export function sanitizeNotes(notes: string | null): string | null {
+  if (!notes) return null;
+  const sanitized = sanitizeText(notes);
+  return sanitized.trim().slice(0, 500) || null;
+}
+```
+
+### 9.0.2 Error Boundary Component (src/components/ErrorBoundary.tsx)
+
+```typescript
+import { Component, ErrorInfo, ReactNode } from 'react';
+
+interface Props {
+  children: ReactNode;
+  fallback?: ReactNode;
+}
+
+interface State {
+  hasError: boolean;
+  error: Error | null;
+}
+
+export class ErrorBoundary extends Component<Props, State> {
+  constructor(props: Props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error: Error): State {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    // Log error to console in development
+    console.error('ErrorBoundary caught an error:', error, errorInfo);
+
+    // In production, you might send this to an error reporting service
+    // e.g., Sentry.captureException(error, { extra: errorInfo });
+  }
+
+  handleReset = () => {
+    this.setState({ hasError: false, error: null });
+  };
+
+  render() {
+    if (this.state.hasError) {
+      if (this.props.fallback) {
+        return this.props.fallback;
+      }
+
+      return (
+        <div className="min-h-screen bg-background flex items-center justify-center p-4">
+          <div className="bg-surface border border-border rounded-lg p-8 max-w-md w-full text-center">
+            <div className="text-danger text-4xl mb-4">⚠️</div>
+            <h1 className="text-xl font-semibold text-text-primary mb-2">
+              Something went wrong
+            </h1>
+            <p className="text-text-secondary mb-6">
+              An unexpected error occurred. Please try refreshing the page.
+            </p>
+            {this.state.error && (
+              <details className="text-left mb-6">
+                <summary className="text-text-muted text-sm cursor-pointer">
+                  Error details
+                </summary>
+                <pre className="mt-2 p-2 bg-background rounded text-xs text-danger overflow-auto">
+                  {this.state.error.message}
+                </pre>
+              </details>
+            )}
+            <div className="flex gap-3 justify-center">
+              <button
+                onClick={() => window.location.reload()}
+                className="btn btn-primary"
+              >
+                Refresh Page
+              </button>
+              <button onClick={this.handleReset} className="btn btn-secondary">
+                Try Again
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
+```
+
 ### 9.1 Date Utilities (src/lib/date-utils.ts)
 
 ```typescript
@@ -1770,16 +2142,40 @@ function expandYearly(
   transaction: DbTransaction,
   instances: ExpandedInstance[]
 ): void {
+  const originalMonth = startDate.getMonth();
+  const originalDay = startDate.getDate();
   let current = startDate;
 
   // Fast-forward to range start
   while (isBefore(current, rangeStart)) {
     current = addYears(current, interval);
+    // Handle Feb 29 in non-leap years: date-fns addYears handles this,
+    // but we may need to adjust if the original was Feb 29
+    if (originalMonth === 1 && originalDay === 29) {
+      // Check if this year has Feb 29
+      const feb29 = new Date(current.getFullYear(), 1, 29);
+      if (feb29.getMonth() === 1) {
+        // Feb 29 exists this year
+        current = feb29;
+      } else {
+        // Use Feb 28 in non-leap years
+        current = new Date(current.getFullYear(), 1, 28);
+      }
+    }
   }
 
   while (!isAfter(current, rangeEnd)) {
     instances.push({ date: new Date(current), transaction });
     current = addYears(current, interval);
+    // Same Feb 29 handling for subsequent years
+    if (originalMonth === 1 && originalDay === 29) {
+      const feb29 = new Date(current.getFullYear(), 1, 29);
+      if (feb29.getMonth() === 1) {
+        current = feb29;
+      } else {
+        current = new Date(current.getFullYear(), 1, 28);
+      }
+    }
   }
 }
 
@@ -1834,6 +2230,7 @@ import {
   formatChartDate,
 } from './date-utils';
 import { expandAllTransactions } from './recurrence';
+import { addAmounts } from './amount-utils';
 import {
   DbAccount,
   DbBalanceCheckpoint,
@@ -1851,6 +2248,15 @@ interface AccountState {
   lastCheckpointDate: Date | null;
 }
 
+/**
+ * Core projection engine that calculates future balances.
+ *
+ * IMPORTANT: This engine correctly handles the case where transactions occurred
+ * between the most recent checkpoint and today. It does this by:
+ * 1. Finding the most recent checkpoint for each account
+ * 2. Replaying all transactions from checkpoint date to today
+ * 3. Then projecting forward from today
+ */
 export function calculateProjection(
   accounts: DbAccount[],
   checkpoints: DbBalanceCheckpoint[],
@@ -1860,13 +2266,13 @@ export function calculateProjection(
 ): ProjectionResult {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  
+
   const rangeStart = today;
   const rangeEnd = addDays(today, timeRangeDays);
 
-  // Initialize account states
+  // Initialize account states from checkpoints
   const accountStates: Map<string, AccountState> = new Map();
-  
+
   for (const account of accounts) {
     // Find most recent checkpoint at or before today
     const relevantCheckpoints = checkpoints
@@ -1875,24 +2281,45 @@ export function calculateProjection(
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
     const latestCheckpoint = relevantCheckpoints[0];
+    const checkpointDate = latestCheckpoint ? new Date(latestCheckpoint.date) : null;
+    let startingBalance = latestCheckpoint ? latestCheckpoint.amount : 0;
+
+    // CRITICAL FIX: Apply transactions that occurred AFTER the checkpoint but BEFORE today
+    // This ensures we don't miss transactions that already happened
+    if (checkpointDate && isBefore(checkpointDate, today)) {
+      const dayAfterCheckpoint = addDays(checkpointDate, 1);
+      const historicalTransactions = expandAllTransactions(
+        transactions.filter(t => t.account_id === account.id),
+        dayAfterCheckpoint,
+        addDays(today, -1) // Yesterday (today's transactions applied in main loop)
+      );
+
+      for (const { transaction } of historicalTransactions) {
+        startingBalance = addAmounts(startingBalance, transaction.amount);
+      }
+    }
 
     accountStates.set(account.id, {
-      balance: latestCheckpoint ? latestCheckpoint.amount : 0,
-      lastCheckpointDate: latestCheckpoint ? new Date(latestCheckpoint.date) : null,
+      balance: startingBalance,
+      lastCheckpointDate: checkpointDate,
     });
   }
 
-  // Build checkpoint map for quick lookup (date string → account → amount)
+  // Build checkpoint map for future checkpoints only (today and beyond)
+  // These will override projected balances when they occur
   const checkpointMap: Map<string, Map<string, number>> = new Map();
   for (const cp of checkpoints) {
-    const dateStr = cp.date;
-    if (!checkpointMap.has(dateStr)) {
-      checkpointMap.set(dateStr, new Map());
+    const cpDate = new Date(cp.date);
+    if (!isBefore(cpDate, today)) {
+      const dateStr = cp.date;
+      if (!checkpointMap.has(dateStr)) {
+        checkpointMap.set(dateStr, new Map());
+      }
+      checkpointMap.get(dateStr)!.set(cp.account_id, cp.amount);
     }
-    checkpointMap.get(dateStr)!.set(cp.account_id, cp.amount);
   }
 
-  // Expand recurring transactions
+  // Expand recurring transactions for the projection period
   const expandedTransactions = expandAllTransactions(transactions, rangeStart, rangeEnd);
 
   // Build transaction map (date string → list of transactions)
@@ -1917,7 +2344,8 @@ export function calculateProjection(
   while (!isAfter(currentDate, rangeEnd)) {
     const dateStr = toDateString(currentDate);
 
-    // Apply checkpoints for this date (resets balance to checkpoint value)
+    // Apply checkpoints FIRST (resets balance to checkpoint value)
+    // This follows the spec: "checkpoints first, then transactions"
     const dayCheckpoints = checkpointMap.get(dateStr);
     if (dayCheckpoints) {
       for (const [accountId, amount] of dayCheckpoints) {
@@ -1929,13 +2357,13 @@ export function calculateProjection(
       }
     }
 
-    // Apply transactions for this date
+    // Apply transactions AFTER checkpoints
     const dayTransactions = transactionMap.get(dateStr);
     if (dayTransactions) {
       for (const { accountId, amount } of dayTransactions) {
         const state = accountStates.get(accountId);
         if (state) {
-          state.balance += amount;
+          state.balance = addAmounts(state.balance, amount);
         }
       }
     }
@@ -1945,8 +2373,10 @@ export function calculateProjection(
     let total = 0;
 
     for (const [accountId, state] of accountStates) {
-      balances[accountId] = Math.round(state.balance * 100) / 100; // Round to 2 decimals
-      total += state.balance;
+      // Round to 2 decimal places for display
+      const roundedBalance = Math.round(state.balance * 100) / 100;
+      balances[accountId] = roundedBalance;
+      total = addAmounts(total, state.balance);
 
       // Check for warnings
       if (state.balance < warningThreshold) {
@@ -1955,7 +2385,7 @@ export function calculateProjection(
           date: new Date(currentDate),
           accountId,
           accountName: account?.name || 'Unknown',
-          balance: state.balance,
+          balance: roundedBalance,
           threshold: warningThreshold,
         });
       }
@@ -2403,9 +2833,9 @@ export default {
 ### 12.1 Parser Module (src/lib/csv-parser.ts)
 
 ```typescript
-import { CSVRow, CSVParseResult } from '@/types/forms';
-import { TransactionInsert, RecurrenceRule } from '@/types/database';
-import { DbAccount } from '@/types/database';
+import { CSVRow, CSVParseResult, ValidatedCSVTransaction } from '@/types/forms';
+import { RecurrenceRule, DbAccount, DbTransaction } from '@/types/database';
+import { sanitizeDescription } from './sanitize';
 
 const REQUIRED_HEADERS = [
   'date',
@@ -2420,13 +2850,23 @@ const REQUIRED_HEADERS = [
 
 const VALID_FREQUENCIES = ['daily', 'weekly', 'biweekly', 'monthly', 'yearly'];
 
+/**
+ * Parse a CSV file and validate transactions.
+ *
+ * Features:
+ * - Case-insensitive account name matching
+ * - Duplicate detection based on date + description + amount + account
+ * - XSS sanitization of description field
+ * - Detailed error reporting per row
+ */
 export function parseCSV(
   csvText: string,
   accounts: DbAccount[],
-  userId: string
+  userId: string,
+  existingTransactions: DbTransaction[] = []
 ): CSVParseResult {
   const lines = csvText.trim().split('\n');
-  
+
   if (lines.length < 2) {
     return {
       valid: [],
@@ -2435,12 +2875,13 @@ export function parseCSV(
         data: {} as CSVRow,
         errors: ['File must contain a header row and at least one data row'],
       }],
+      duplicateWarnings: [],
     };
   }
 
   // Parse header
   const headers = parseCSVLine(lines[0]).map(h => h.toLowerCase().trim());
-  
+
   // Validate headers
   const missingHeaders = REQUIRED_HEADERS.filter(h => !headers.includes(h));
   if (missingHeaders.length > 0) {
@@ -2451,14 +2892,28 @@ export function parseCSV(
         data: {} as CSVRow,
         errors: [`Missing required columns: ${missingHeaders.join(', ')}`],
       }],
+      duplicateWarnings: [],
     };
   }
 
-  // Build account lookup map
+  // Build account lookup map (case-insensitive)
   const accountMap = new Map(accounts.map(a => [a.name.toLowerCase(), a]));
 
-  const valid: TransactionInsert[] = [];
+  // Build existing transaction fingerprint set for duplicate detection
+  const existingFingerprints = new Map<string, string>();
+  for (const tx of existingTransactions) {
+    const fingerprint = createTransactionFingerprint(
+      tx.date,
+      tx.description,
+      tx.amount,
+      tx.account_id
+    );
+    existingFingerprints.set(fingerprint, tx.id);
+  }
+
+  const valid: ValidatedCSVTransaction[] = [];
   const errors: CSVParseResult['errors'] = [];
+  const duplicateWarnings: CSVParseResult['duplicateWarnings'] = [];
 
   // Parse data rows
   for (let i = 1; i < lines.length; i++) {
@@ -2483,11 +2938,41 @@ export function parseCSV(
       errors.push({ row: i + 1, data: row, errors: rowErrors });
     } else {
       const transaction = convertToTransaction(row, accountMap, userId);
+
+      // Check for duplicates
+      const fingerprint = createTransactionFingerprint(
+        transaction.date,
+        transaction.description,
+        transaction.amount,
+        transaction.account_id
+      );
+      const existingId = existingFingerprints.get(fingerprint);
+
+      if (existingId) {
+        duplicateWarnings.push({
+          row: i + 1,
+          existingId,
+          message: `Possible duplicate of existing transaction (${row.date}: ${row.description})`,
+        });
+      }
+
       valid.push(transaction);
     }
   }
 
-  return { valid, errors };
+  return { valid, errors, duplicateWarnings };
+}
+
+/**
+ * Create a fingerprint for duplicate detection.
+ */
+function createTransactionFingerprint(
+  date: string,
+  description: string,
+  amount: number,
+  accountId: string
+): string {
+  return `${date}|${description.toLowerCase().trim()}|${amount}|${accountId}`;
 }
 
 function parseCSVLine(line: string): string[] {
@@ -2598,7 +3083,7 @@ function convertToTransaction(
   row: CSVRow,
   accountMap: Map<string, DbAccount>,
   userId: string
-): TransactionInsert {
+): ValidatedCSVTransaction {
   const account = accountMap.get(row.account.toLowerCase())!;
   const isRecurring = row.is_recurring.toLowerCase() === 'true';
 
@@ -2612,9 +3097,9 @@ function convertToTransaction(
   return {
     user_id: userId,
     account_id: account.id,
-    description: row.description,
+    description: sanitizeDescription(row.description), // XSS protection
     amount: parseFloat(row.amount),
-    category: row.category || null,
+    category: row.category?.trim() || null,
     date: row.date,
     is_recurring: isRecurring,
     recurrence_rule: recurrenceRule,
@@ -2871,9 +3356,525 @@ useEffect(() => {
 
 ---
 
-## 15. Deployment Configuration
+## 15. Testing Strategy
 
-### 15.1 Vercel Configuration
+### 15.1 Test Setup (tests/setup.ts)
+
+```typescript
+import '@testing-library/jest-dom';
+import { vi } from 'vitest';
+
+// Mock Supabase client
+vi.mock('@/lib/supabase', () => ({
+  supabase: {
+    auth: {
+      getSession: vi.fn(),
+      getUser: vi.fn(),
+      onAuthStateChange: vi.fn(() => ({ data: { subscription: { unsubscribe: vi.fn() } } })),
+    },
+    from: vi.fn(() => ({
+      select: vi.fn().mockReturnThis(),
+      insert: vi.fn().mockReturnThis(),
+      update: vi.fn().mockReturnThis(),
+      delete: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      single: vi.fn(),
+    })),
+  },
+}));
+
+// Reset mocks between tests
+beforeEach(() => {
+  vi.clearAllMocks();
+});
+```
+
+### 15.2 Projection Engine Tests (tests/lib/projection-engine.test.ts)
+
+```typescript
+import { describe, it, expect } from 'vitest';
+import { calculateProjection } from '@/lib/projection-engine';
+import { DbAccount, DbBalanceCheckpoint, DbTransaction } from '@/types/database';
+
+describe('calculateProjection', () => {
+  const mockAccount: DbAccount = {
+    id: 'acc-1',
+    user_id: 'user-1',
+    name: 'Checking',
+    created_at: '2024-01-01T00:00:00Z',
+    updated_at: '2024-01-01T00:00:00Z',
+  };
+
+  it('should start with checkpoint balance', () => {
+    const checkpoint: DbBalanceCheckpoint = {
+      id: 'cp-1',
+      user_id: 'user-1',
+      account_id: 'acc-1',
+      date: '2024-01-01',
+      amount: 1000,
+      notes: null,
+      created_at: '2024-01-01T00:00:00Z',
+      updated_at: '2024-01-01T00:00:00Z',
+    };
+
+    const result = calculateProjection([mockAccount], [checkpoint], [], 30, 500);
+
+    expect(result.dataPoints[0].balances['acc-1']).toBe(1000);
+  });
+
+  it('should apply transactions between checkpoint and today', () => {
+    // Checkpoint was 5 days ago with $1000
+    const fiveDaysAgo = new Date();
+    fiveDaysAgo.setDate(fiveDaysAgo.getDate() - 5);
+
+    const threeDaysAgo = new Date();
+    threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
+
+    const checkpoint: DbBalanceCheckpoint = {
+      id: 'cp-1',
+      user_id: 'user-1',
+      account_id: 'acc-1',
+      date: fiveDaysAgo.toISOString().split('T')[0],
+      amount: 1000,
+      notes: null,
+      created_at: fiveDaysAgo.toISOString(),
+      updated_at: fiveDaysAgo.toISOString(),
+    };
+
+    // Transaction 3 days ago for -$100
+    const transaction: DbTransaction = {
+      id: 'tx-1',
+      user_id: 'user-1',
+      account_id: 'acc-1',
+      description: 'Expense',
+      amount: -100,
+      category: null,
+      date: threeDaysAgo.toISOString().split('T')[0],
+      is_recurring: false,
+      recurrence_rule: null,
+      end_date: null,
+      created_at: threeDaysAgo.toISOString(),
+      updated_at: threeDaysAgo.toISOString(),
+    };
+
+    const result = calculateProjection([mockAccount], [checkpoint], [transaction], 30, 500);
+
+    // Today's balance should be 1000 - 100 = 900
+    expect(result.dataPoints[0].balances['acc-1']).toBe(900);
+  });
+
+  it('should generate warnings when balance drops below threshold', () => {
+    const today = new Date().toISOString().split('T')[0];
+
+    const checkpoint: DbBalanceCheckpoint = {
+      id: 'cp-1',
+      user_id: 'user-1',
+      account_id: 'acc-1',
+      date: today,
+      amount: 600,
+      notes: null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+
+    // Large expense tomorrow
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    const transaction: DbTransaction = {
+      id: 'tx-1',
+      user_id: 'user-1',
+      account_id: 'acc-1',
+      description: 'Big expense',
+      amount: -200,
+      category: null,
+      date: tomorrow.toISOString().split('T')[0],
+      is_recurring: false,
+      recurrence_rule: null,
+      end_date: null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+
+    const result = calculateProjection([mockAccount], [checkpoint], [transaction], 30, 500);
+
+    // Should have warnings starting from tomorrow (600 - 200 = 400 < 500)
+    expect(result.warnings.length).toBeGreaterThan(0);
+    expect(result.warnings[0].balance).toBe(400);
+  });
+
+  it('should expand recurring transactions correctly', () => {
+    const today = new Date().toISOString().split('T')[0];
+
+    const checkpoint: DbBalanceCheckpoint = {
+      id: 'cp-1',
+      user_id: 'user-1',
+      account_id: 'acc-1',
+      date: today,
+      amount: 1000,
+      notes: null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+
+    // Daily recurring expense of $10
+    const transaction: DbTransaction = {
+      id: 'tx-1',
+      user_id: 'user-1',
+      account_id: 'acc-1',
+      description: 'Daily expense',
+      amount: -10,
+      category: null,
+      date: today,
+      is_recurring: true,
+      recurrence_rule: { frequency: 'daily', interval: 1 },
+      end_date: null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+
+    const result = calculateProjection([mockAccount], [checkpoint], [transaction], 10, 0);
+
+    // After 10 days: 1000 - (10 * 10) = 900 (day 0 is today, includes today's expense)
+    const lastDay = result.dataPoints[result.dataPoints.length - 1];
+    expect(lastDay.balances['acc-1']).toBe(890); // 11 days of $10 = $110 deducted
+  });
+});
+```
+
+### 15.3 Recurrence Tests (tests/lib/recurrence.test.ts)
+
+```typescript
+import { describe, it, expect } from 'vitest';
+import { expandRecurringTransaction } from '@/lib/recurrence';
+import { DbTransaction } from '@/types/database';
+
+describe('expandRecurringTransaction', () => {
+  const baseTransaction: DbTransaction = {
+    id: 'tx-1',
+    user_id: 'user-1',
+    account_id: 'acc-1',
+    description: 'Test',
+    amount: -100,
+    category: null,
+    date: '2024-01-01',
+    is_recurring: true,
+    recurrence_rule: null,
+    end_date: null,
+    created_at: '2024-01-01T00:00:00Z',
+    updated_at: '2024-01-01T00:00:00Z',
+  };
+
+  it('should expand daily recurring transactions', () => {
+    const tx: DbTransaction = {
+      ...baseTransaction,
+      recurrence_rule: { frequency: 'daily', interval: 1 },
+    };
+
+    const instances = expandRecurringTransaction(
+      tx,
+      new Date('2024-01-01'),
+      new Date('2024-01-05')
+    );
+
+    expect(instances.length).toBe(5); // Jan 1-5
+  });
+
+  it('should expand weekly recurring transactions', () => {
+    const tx: DbTransaction = {
+      ...baseTransaction,
+      recurrence_rule: { frequency: 'weekly', interval: 1 },
+    };
+
+    const instances = expandRecurringTransaction(
+      tx,
+      new Date('2024-01-01'),
+      new Date('2024-01-31')
+    );
+
+    expect(instances.length).toBe(5); // Jan 1, 8, 15, 22, 29
+  });
+
+  it('should expand biweekly recurring transactions', () => {
+    const tx: DbTransaction = {
+      ...baseTransaction,
+      recurrence_rule: { frequency: 'biweekly' },
+    };
+
+    const instances = expandRecurringTransaction(
+      tx,
+      new Date('2024-01-01'),
+      new Date('2024-02-29')
+    );
+
+    expect(instances.length).toBe(5); // Jan 1, 15, 29, Feb 12, 26
+  });
+
+  it('should expand monthly on specific days', () => {
+    const tx: DbTransaction = {
+      ...baseTransaction,
+      recurrence_rule: { frequency: 'monthly', daysOfMonth: [15, 30] },
+    };
+
+    const instances = expandRecurringTransaction(
+      tx,
+      new Date('2024-01-01'),
+      new Date('2024-03-31')
+    );
+
+    // Jan 15, Jan 30, Feb 15, Feb 29 (30 -> 29), Mar 15, Mar 30
+    expect(instances.length).toBe(6);
+  });
+
+  it('should handle last day of month', () => {
+    const tx: DbTransaction = {
+      ...baseTransaction,
+      recurrence_rule: { frequency: 'monthly', lastDayOfMonth: true },
+    };
+
+    const instances = expandRecurringTransaction(
+      tx,
+      new Date('2024-01-01'),
+      new Date('2024-04-30')
+    );
+
+    expect(instances.length).toBe(4);
+    expect(instances[0].date.getDate()).toBe(31); // Jan 31
+    expect(instances[1].date.getDate()).toBe(29); // Feb 29 (2024 is leap year)
+    expect(instances[2].date.getDate()).toBe(31); // Mar 31
+    expect(instances[3].date.getDate()).toBe(30); // Apr 30
+  });
+
+  it('should handle nth weekday of month', () => {
+    const tx: DbTransaction = {
+      ...baseTransaction,
+      recurrence_rule: { frequency: 'monthly', weekday: 5, weekOfMonth: 1 }, // First Friday
+    };
+
+    const instances = expandRecurringTransaction(
+      tx,
+      new Date('2024-01-01'),
+      new Date('2024-03-31')
+    );
+
+    expect(instances.length).toBe(3);
+    expect(instances[0].date.toISOString().split('T')[0]).toBe('2024-01-05');
+    expect(instances[1].date.toISOString().split('T')[0]).toBe('2024-02-02');
+    expect(instances[2].date.toISOString().split('T')[0]).toBe('2024-03-01');
+  });
+
+  it('should respect end date', () => {
+    const tx: DbTransaction = {
+      ...baseTransaction,
+      recurrence_rule: { frequency: 'daily', interval: 1 },
+      end_date: '2024-01-03',
+    };
+
+    const instances = expandRecurringTransaction(
+      tx,
+      new Date('2024-01-01'),
+      new Date('2024-01-31')
+    );
+
+    expect(instances.length).toBe(3); // Only Jan 1-3
+  });
+
+  it('should handle yearly with Feb 29 in non-leap year', () => {
+    const tx: DbTransaction = {
+      ...baseTransaction,
+      date: '2024-02-29', // Leap year
+      recurrence_rule: { frequency: 'yearly', interval: 1 },
+    };
+
+    const instances = expandRecurringTransaction(
+      tx,
+      new Date('2024-02-29'),
+      new Date('2027-03-01')
+    );
+
+    expect(instances.length).toBe(4);
+    expect(instances[0].date.toISOString().split('T')[0]).toBe('2024-02-29');
+    expect(instances[1].date.toISOString().split('T')[0]).toBe('2025-02-28'); // Non-leap: Feb 28
+    expect(instances[2].date.toISOString().split('T')[0]).toBe('2026-02-28'); // Non-leap: Feb 28
+    expect(instances[3].date.toISOString().split('T')[0]).toBe('2027-02-28'); // Non-leap: Feb 28
+  });
+});
+```
+
+### 15.4 CSV Parser Tests (tests/lib/csv-parser.test.ts)
+
+```typescript
+import { describe, it, expect } from 'vitest';
+import { parseCSV } from '@/lib/csv-parser';
+import { DbAccount } from '@/types/database';
+
+describe('parseCSV', () => {
+  const mockAccounts: DbAccount[] = [
+    {
+      id: 'acc-1',
+      user_id: 'user-1',
+      name: 'Chase Checking',
+      created_at: '2024-01-01T00:00:00Z',
+      updated_at: '2024-01-01T00:00:00Z',
+    },
+  ];
+
+  it('should parse valid CSV rows', () => {
+    const csv = `date,description,amount,account,category,is_recurring,frequency,end_date
+2024-01-15,Salary,5000.00,Chase Checking,Income,false,,`;
+
+    const result = parseCSV(csv, mockAccounts, 'user-1');
+
+    expect(result.valid.length).toBe(1);
+    expect(result.errors.length).toBe(0);
+    expect(result.valid[0].description).toBe('Salary');
+    expect(result.valid[0].amount).toBe(5000);
+  });
+
+  it('should handle case-insensitive account matching', () => {
+    const csv = `date,description,amount,account,category,is_recurring,frequency,end_date
+2024-01-15,Test,100,chase checking,Income,false,,`;
+
+    const result = parseCSV(csv, mockAccounts, 'user-1');
+
+    expect(result.valid.length).toBe(1);
+    expect(result.valid[0].account_id).toBe('acc-1');
+  });
+
+  it('should report missing required columns', () => {
+    const csv = `date,description,amount
+2024-01-15,Salary,5000`;
+
+    const result = parseCSV(csv, mockAccounts, 'user-1');
+
+    expect(result.valid.length).toBe(0);
+    expect(result.errors.length).toBe(1);
+    expect(result.errors[0].errors[0]).toContain('Missing required columns');
+  });
+
+  it('should validate date format', () => {
+    const csv = `date,description,amount,account,category,is_recurring,frequency,end_date
+01-15-2024,Salary,5000,Chase Checking,Income,false,,`;
+
+    const result = parseCSV(csv, mockAccounts, 'user-1');
+
+    expect(result.valid.length).toBe(0);
+    expect(result.errors[0].errors).toContain('Date must be in YYYY-MM-DD format');
+  });
+
+  it('should detect duplicate transactions', () => {
+    const existingTransactions = [{
+      id: 'tx-existing',
+      user_id: 'user-1',
+      account_id: 'acc-1',
+      description: 'Salary',
+      amount: 5000,
+      category: 'Income',
+      date: '2024-01-15',
+      is_recurring: false,
+      recurrence_rule: null,
+      end_date: null,
+      created_at: '2024-01-01T00:00:00Z',
+      updated_at: '2024-01-01T00:00:00Z',
+    }];
+
+    const csv = `date,description,amount,account,category,is_recurring,frequency,end_date
+2024-01-15,Salary,5000,Chase Checking,Income,false,,`;
+
+    const result = parseCSV(csv, mockAccounts, 'user-1', existingTransactions);
+
+    expect(result.valid.length).toBe(1); // Still valid, just warned
+    expect(result.duplicateWarnings.length).toBe(1);
+    expect(result.duplicateWarnings[0].existingId).toBe('tx-existing');
+  });
+
+  it('should sanitize description for XSS', () => {
+    const csv = `date,description,amount,account,category,is_recurring,frequency,end_date
+2024-01-15,<script>alert('xss')</script>Test,100,Chase Checking,Income,false,,`;
+
+    const result = parseCSV(csv, mockAccounts, 'user-1');
+
+    expect(result.valid.length).toBe(1);
+    expect(result.valid[0].description).not.toContain('<script>');
+    expect(result.valid[0].description).toBe('Test');
+  });
+
+  it('should validate recurring transaction has frequency', () => {
+    const csv = `date,description,amount,account,category,is_recurring,frequency,end_date
+2024-01-15,Rent,-1500,Chase Checking,Housing,true,,`;
+
+    const result = parseCSV(csv, mockAccounts, 'user-1');
+
+    expect(result.valid.length).toBe(0);
+    expect(result.errors[0].errors).toContain('Frequency is required for recurring transactions');
+  });
+});
+```
+
+### 15.5 Amount Utilities Tests (tests/lib/amount-utils.test.ts)
+
+```typescript
+import { describe, it, expect } from 'vitest';
+import {
+  addAmounts,
+  subtractAmounts,
+  multiplyAmount,
+  roundAmount,
+  parseAmount,
+  sumAmounts,
+} from '@/lib/amount-utils';
+
+describe('amount-utils', () => {
+  describe('addAmounts', () => {
+    it('should add amounts without floating point errors', () => {
+      // 0.1 + 0.2 would normally be 0.30000000000000004
+      expect(addAmounts(0.1, 0.2)).toBe(0.3);
+      expect(addAmounts(10.99, 5.01)).toBe(16);
+      expect(addAmounts(-100.50, 50.25)).toBe(-50.25);
+    });
+  });
+
+  describe('subtractAmounts', () => {
+    it('should subtract amounts without floating point errors', () => {
+      expect(subtractAmounts(1.0, 0.9)).toBe(0.1);
+      expect(subtractAmounts(100, 33.33)).toBe(66.67);
+    });
+  });
+
+  describe('multiplyAmount', () => {
+    it('should multiply amounts correctly', () => {
+      expect(multiplyAmount(10.50, 3)).toBe(31.5);
+      expect(multiplyAmount(99.99, 0.1)).toBe(10); // Rounds to 2 decimals
+    });
+  });
+
+  describe('parseAmount', () => {
+    it('should parse valid amounts', () => {
+      expect(parseAmount('100.50')).toBe(100.5);
+      expect(parseAmount('$1,234.56')).toBe(1234.56);
+      expect(parseAmount('-50.00')).toBe(-50);
+    });
+
+    it('should return null for invalid amounts', () => {
+      expect(parseAmount('abc')).toBeNull();
+      expect(parseAmount('')).toBeNull();
+    });
+  });
+
+  describe('sumAmounts', () => {
+    it('should sum array of amounts', () => {
+      expect(sumAmounts([10.1, 20.2, 30.3])).toBe(60.6);
+      expect(sumAmounts([])).toBe(0);
+    });
+  });
+});
+```
+
+---
+
+## 16. Deployment Configuration
+
+### 16.1 Vercel Configuration
 
 ```json
 // vercel.json
@@ -2896,7 +3897,7 @@ useEffect(() => {
 }
 ```
 
-### 15.2 Environment Variables in Vercel
+### 16.2 Environment Variables in Vercel
 
 Set these in the Vercel dashboard under Project Settings → Environment Variables:
 
@@ -2905,7 +3906,7 @@ Set these in the Vercel dashboard under Project Settings → Environment Variabl
 | `VITE_SUPABASE_URL` | Production, Preview, Development | Your Supabase project URL |
 | `VITE_SUPABASE_ANON_KEY` | Production, Preview, Development | Your Supabase anon key |
 
-### 15.3 Supabase Configuration
+### 16.3 Supabase Configuration
 
 In Supabase Dashboard:
 
@@ -2921,7 +3922,133 @@ In Supabase Dashboard:
 
 ---
 
-## Appendix: Constants
+## Appendix A: Format Utilities
+
+### src/lib/format-utils.ts
+
+```typescript
+/**
+ * Format a number as currency (USD).
+ */
+export function formatCurrency(amount: number): string {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(amount);
+}
+
+/**
+ * Format a number as currency without the dollar sign.
+ * Useful for input fields.
+ */
+export function formatAmount(amount: number): string {
+  return new Intl.NumberFormat('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(amount);
+}
+
+/**
+ * Format a number with sign prefix.
+ * Returns "+$100.00" or "-$100.00"
+ */
+export function formatSignedCurrency(amount: number): string {
+  const formatted = formatCurrency(Math.abs(amount));
+  if (amount >= 0) {
+    return `+${formatted}`;
+  }
+  return `-${formatted}`;
+}
+
+/**
+ * Format a date for display in the UI.
+ */
+export function formatDisplayDate(date: Date | string): string {
+  const d = typeof date === 'string' ? new Date(date) : date;
+  return new Intl.DateTimeFormat('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  }).format(d);
+}
+
+/**
+ * Format a date for the chart x-axis.
+ */
+export function formatChartDate(date: Date | string): string {
+  const d = typeof date === 'string' ? new Date(date) : date;
+  return new Intl.DateTimeFormat('en-US', {
+    month: 'short',
+    day: 'numeric',
+  }).format(d);
+}
+
+/**
+ * Format a date as ISO string (YYYY-MM-DD) for form inputs.
+ */
+export function formatInputDate(date: Date): string {
+  return date.toISOString().split('T')[0];
+}
+
+/**
+ * Format a recurrence rule for display.
+ */
+export function formatRecurrence(rule: RecurrenceRule | null): string {
+  if (!rule) return '';
+
+  const interval = rule.interval || 1;
+
+  switch (rule.frequency) {
+    case 'daily':
+      return interval === 1 ? 'Daily' : `Every ${interval} days`;
+
+    case 'weekly':
+      return interval === 1 ? 'Weekly' : `Every ${interval} weeks`;
+
+    case 'biweekly':
+      return 'Every 2 weeks';
+
+    case 'monthly':
+      if (rule.lastDayOfMonth) {
+        return 'Last day of month';
+      }
+      if (rule.daysOfMonth && rule.daysOfMonth.length > 0) {
+        const days = rule.daysOfMonth.map(d => ordinal(d)).join(', ');
+        return `Monthly on the ${days}`;
+      }
+      if (rule.weekday !== undefined && rule.weekOfMonth !== undefined) {
+        const weekdayName = WEEKDAY_LABELS[rule.weekday];
+        const week = rule.weekOfMonth === -1 ? 'last' : ordinal(rule.weekOfMonth);
+        return `${week} ${weekdayName} of month`;
+      }
+      return 'Monthly';
+
+    case 'yearly':
+      return interval === 1 ? 'Yearly' : `Every ${interval} years`;
+
+    default:
+      return 'Custom';
+  }
+}
+
+/**
+ * Convert a number to its ordinal form (1st, 2nd, 3rd, etc.)
+ */
+function ordinal(n: number): string {
+  const s = ['th', 'st', 'nd', 'rd'];
+  const v = n % 100;
+  return n + (s[(v - 20) % 10] || s[v] || s[0]);
+}
+
+import { RecurrenceRule } from '@/types/database';
+import { WEEKDAY_LABELS } from './constants';
+```
+
+---
+
+## Appendix B: Constants
 
 ### src/lib/constants.ts
 

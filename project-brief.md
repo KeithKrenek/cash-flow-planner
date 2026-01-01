@@ -82,6 +82,11 @@ Complex patterns:
 
 Optional end date for recurring transactions.
 
+**Edge Case Handling:**
+- **Day overflow**: If a monthly transaction is set for the 31st, it falls on the last day in months with fewer days (e.g., Feb 28/29, Apr 30)
+- **Leap years**: Yearly transactions on Feb 29 occur on Feb 28 in non-leap years
+- **Bi-weekly anchor**: The start date of a bi-weekly transaction serves as the anchor point; all occurrences are exactly 14 days apart from that anchor
+
 ### Cash Flow Visualization
 - Line chart showing projected balance over time
 - Separate line for each account (distinct colors)
@@ -108,7 +113,9 @@ Bulk import transactions from a CSV file conforming to the required format. The 
 - Upload a CSV file
 - Preview parsed data before confirming
 - See validation errors for malformed rows
+- See duplicate warnings for transactions that may already exist
 - Import valid rows while skipping invalid ones
+- Account name matching is case-insensitive for user convenience
 
 ### Global Settings
 - Warning threshold: minimum balance that triggers visual alerts
@@ -271,7 +278,7 @@ date,description,amount,account,category,is_recurring,frequency,end_date
 | date | Yes | YYYY-MM-DD | 2024-01-15 |
 | description | Yes | String | Monthly Salary |
 | amount | Yes | Decimal (positive = income, negative = expense) | 5000.00 or -49.99 |
-| account | Yes | String (must match existing account name exactly) | Chase Checking |
+| account | Yes | String (must match existing account name, case-insensitive) | Chase Checking |
 | category | No | String (from category list or custom) | Income |
 | is_recurring | Yes | true or false | true |
 | frequency | If recurring | daily, weekly, biweekly, monthly, yearly | monthly |
@@ -290,10 +297,11 @@ date,description,amount,account,category,is_recurring,frequency,end_date
 **Validation rules:**
 - Date must be valid and in correct format
 - Amount must be a valid number
-- Account must match an existing account name (case-sensitive)
+- Account must match an existing account name (case-insensitive matching)
 - is_recurring must be exactly "true" or "false"
 - If is_recurring is true, frequency is required
 - Complex recurrence patterns cannot be imported via CSV; configure them in-app after import
+- Duplicate detection warns (but does not block) when a transaction with the same date, description, amount, and account already exists
 
 ---
 
@@ -305,11 +313,13 @@ date,description,amount,account,category,is_recurring,frequency,end_date
 | React | 18.x | UI framework |
 | TypeScript | 5.x | Type safety |
 | Vite | 5.x | Build tool and dev server |
+| Vitest | 1.x | Unit testing |
 | Tailwind CSS | 3.x | Styling |
 | Recharts | 2.x | Chart visualization |
 | TanStack Table | 8.x | Table with sorting/filtering |
 | TanStack Query | 5.x | Data fetching and caching |
 | date-fns | 3.x | Date manipulation |
+| DOMPurify | 3.x | XSS sanitization |
 | React Hot Toast | 2.x | Toast notifications |
 
 ### Backend Stack
@@ -395,35 +405,44 @@ Process:
 1. INITIALIZE ACCOUNT BALANCES
    For each account:
      Find the most recent checkpoint where checkpoint.date <= startDate
-     If found: set account.startingBalance = checkpoint.amount
-               set account.startingDate = checkpoint.date
-     Else: set account.startingBalance = 0
-           set account.startingDate = startDate
+     If found:
+       Set account.startingBalance = checkpoint.amount
+       Set account.startingDate = checkpoint.date
+
+       IMPORTANT: Replay historical transactions
+       If checkpoint.date < startDate:
+         Expand all transactions for this account from (checkpoint.date + 1) to (startDate - 1)
+         Apply each to startingBalance
+         This ensures transactions that already occurred are reflected
+     Else:
+       Set account.startingBalance = 0
+       Set account.startingDate = startDate
 
 2. EXPAND RECURRING TRANSACTIONS
    For each transaction where is_recurring = true:
-     Generate all instances between max(transaction.date, startDate) and 
+     Generate all instances between max(transaction.date, startDate) and
        min(transaction.end_date or endDate, endDate)
      Apply recurrence_rule to calculate each instance date
      Handle edge cases:
        - If day doesn't exist in month (e.g., Feb 30), use last day of month
        - If lastDayOfMonth = true, calculate actual last day for each month
+       - If yearly on Feb 29, use Feb 28 in non-leap years
      Add each instance as a temporary transaction object
 
 3. MERGE TRANSACTIONS
    Combine:
      - One-time transactions within date range
      - Expanded recurring transaction instances
-     - Balance checkpoints (treated as "set balance to X" operations)
+     - Balance checkpoints within date range (future checkpoints override projections)
    Sort by date ascending, then by type (checkpoints first, then transactions)
 
 4. CALCULATE DAILY BALANCES
    Create a map: date -> { accountBalances: {}, total: 0, warnings: [] }
    Set currentBalances = { accountId: startingBalance } for each account
-   
+
    For each day from startDate to endDate:
-     Apply any checkpoints for this day (reset account balance)
-     Apply all transactions for this day (add/subtract from account)
+     Apply any checkpoints for this day FIRST (reset account balance)
+     Apply all transactions for this day SECOND (add/subtract from account)
      Record currentBalances snapshot for this day
      Calculate total across all accounts
      If any account balance < warningThreshold:
@@ -439,6 +458,17 @@ Process:
      warnings: [array of { date, accountId, balance }]
    }
 ```
+
+**Example scenario:**
+- Checkpoint on Jan 1: $1,000
+- Transaction on Jan 5: -$100 (recurring monthly)
+- Today is Jan 10
+
+The engine will:
+1. Start with checkpoint balance: $1,000
+2. Replay Jan 5 transaction: $1,000 - $100 = $900
+3. Today's starting balance: $900
+4. Project forward with Feb 5, Mar 5, etc. transactions
 
 ---
 

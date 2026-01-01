@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm create:*)",
+      "Bash(dir /b)",
+      "Bash(npm install:*)",
+      "Bash(npm run typecheck:*)",
+      "Bash(npm run build:*)",
+      "Bash(npm run test:run:*)",
+      "Bash(timeout 5 npm run dev:*)",
+      "Bash(exit 0)",
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nImplement Phase 1 & 2: Project setup and core utilities\n\nPhase 1 - Project Setup:\n- Initialize Vite + React + TypeScript project\n- Configure Tailwind CSS with custom dark theme\n- Set up Vitest for testing with jsdom environment\n- Configure path aliases \\(@/\\) for clean imports\n- Create directory structure and placeholder components\n\nPhase 2 - Core Utilities & Types:\n- Add type definitions for database, domain, and forms\n- Implement safe decimal arithmetic \\(amount-utils\\)\n- Add date manipulation utilities with recurrence support\n- Create currency and recurrence formatting utilities\n- Add XSS sanitization with DOMPurify\n- Implement general utilities \\(debounce, groupBy, etc.\\)\n- Add comprehensive test suite \\(205 tests passing\\)\n\n🤖 Generated with [Claude Code]\\(https://claude.com/claude-code\\)\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")"
+    ]
+  }
+}
