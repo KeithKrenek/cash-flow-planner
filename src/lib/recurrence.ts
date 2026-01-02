@@ -1,18 +1,13 @@
-import { addDays, addWeeks, addMonths, addYears, getDaysInMonth } from 'date-fns';
+import { addDays, addWeeks, addYears, getDaysInMonth, startOfDay } from 'date-fns';
 import type { DbTransaction, RecurrenceRule } from '@/types/database';
 import {
   fromDateString,
   toDateString,
-  startOfDay,
   isDateBefore,
   isDateAfter,
-  isSameDayAs,
   getNthWeekdayOfMonth,
   getLastDayOfMonth,
 } from './date-utils';
-
-// Import startOfDay from date-fns for internal use
-import { startOfDay as dfStartOfDay } from 'date-fns';
 
 /**
  * Represents an expanded instance of a recurring transaction.
@@ -63,8 +58,8 @@ export function expandRecurringTransaction(
   const endDate = endDateStr ? fromDateString(endDateStr) : null;
 
   // Normalize range dates
-  const start = dfStartOfDay(rangeStart);
-  const end = dfStartOfDay(rangeEnd);
+  const start = startOfDay(rangeStart);
+  const end = startOfDay(rangeEnd);
 
   // If transaction starts after range ends, no instances
   if (isDateAfter(startDate, end)) {
@@ -279,7 +274,7 @@ function expandMonthly(
       for (const day of daysOfMonth) {
         // Clamp to actual days in month
         const clampedDay = Math.min(day, daysInMonth);
-        const date = dfStartOfDay(new Date(currentYear, currentMonth, clampedDay));
+        const date = startOfDay(new Date(currentYear, currentMonth, clampedDay));
 
         if (
           !isDateBefore(date, rangeStart) &&
@@ -331,7 +326,7 @@ function expandYearly(
       day = Math.min(anchorDay, daysInFeb);
     }
 
-    const date = dfStartOfDay(new Date(currentYear, anchorMonth, day));
+    const date = startOfDay(new Date(currentYear, anchorMonth, day));
 
     if (isDateAfter(date, rangeEnd)) break;
 
@@ -420,5 +415,3 @@ export function getNextOccurrence(
   return null;
 }
 
-// Re-export startOfDay for consistency
-export { startOfDay };

@@ -83,12 +83,6 @@ export function useProjection(options: UseProjectionOptions): UseProjectionResul
     transactionsQuery.isLoading ||
     settingsQuery.isLoading;
 
-  const isFetching =
-    accountsQuery.isFetching ||
-    checkpointsQuery.isFetching ||
-    transactionsQuery.isFetching ||
-    settingsQuery.isFetching;
-
   // Get first error if any
   const error =
     accountsQuery.error ||

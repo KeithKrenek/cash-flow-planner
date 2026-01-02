@@ -21,7 +21,7 @@ import {
   getDateRange,
 } from './date-utils';
 import { addAmounts, sumAmounts } from './amount-utils';
-import { expandRecurringTransaction, type ExpandedTransaction } from './recurrence';
+import { expandRecurringTransaction } from './recurrence';
 
 /**
  * Event types that can occur on a projection day.
