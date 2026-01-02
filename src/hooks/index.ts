@@ -34,3 +34,5 @@ export {
   useWarningThreshold,
   settingsKeys,
 } from './useSettings';
+export { useDebounce } from './useDebounce';
+export { useDebouncedSave, type UseDebouncedSaveOptions, type UseDebouncedSaveResult } from './useDebouncedSave';
