@@ -405,6 +405,12 @@ export function parseCSV(
     const accountId = accountMap.get(accountLower) || `__NEW__${accountLower}`;
     const transaction = convertToTransactionWithAccountId(row, accountId, userId);
 
+    // Skip zero-amount transactions (these are typically just initial balance markers)
+    // The database has a constraint that amount cannot be zero
+    if (transaction.amount === 0) {
+      continue;
+    }
+
     // Check for duplicates (only for existing accounts)
     if (accountMap.has(accountLower)) {
       const fingerprint = createTransactionFingerprint(

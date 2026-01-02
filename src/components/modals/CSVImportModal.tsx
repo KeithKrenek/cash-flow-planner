@@ -232,10 +232,6 @@ export function CSVImportModal({ isOpen, onClose }: CSVImportModalProps) {
             end_date: tx.end_date,
           }));
 
-          // Debug logging - remove after fixing
-          console.log('Transactions to insert:', JSON.stringify(transactionsToInsert, null, 2));
-          console.log('Account map:', Object.fromEntries(allAccountsMap));
-
           await createManyTransactions.mutateAsync(transactionsToInsert);
           summary.transactionsImported = transactionsToInsert.length;
         }
