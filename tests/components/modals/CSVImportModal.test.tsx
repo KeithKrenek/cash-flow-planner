@@ -26,11 +26,15 @@ const mockAccounts: DbAccount[] = [
 const mockTransactions: DbTransaction[] = [];
 
 const mockCreateManyMutate = vi.fn();
+const mockCreateAccountMutate = vi.fn();
+const mockCreateCheckpointMutate = vi.fn();
+const mockRefetchAccounts = vi.fn();
 
 vi.mock('@/hooks', () => ({
   useAccounts: vi.fn(() => ({
     data: mockAccounts,
     isLoading: false,
+    refetch: mockRefetchAccounts,
   })),
   useTransactions: vi.fn(() => ({
     data: mockTransactions,
@@ -38,6 +42,14 @@ vi.mock('@/hooks', () => ({
   })),
   useCreateManyTransactions: vi.fn(() => ({
     mutateAsync: mockCreateManyMutate,
+    isPending: false,
+  })),
+  useCreateAccount: vi.fn(() => ({
+    mutateAsync: mockCreateAccountMutate,
+    isPending: false,
+  })),
+  useCreateCheckpoint: vi.fn(() => ({
+    mutateAsync: mockCreateCheckpointMutate,
     isPending: false,
   })),
 }));
@@ -74,6 +86,9 @@ describe('CSVImportModal', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockCreateManyMutate.mockResolvedValue([]);
+    mockCreateAccountMutate.mockResolvedValue({ id: 'new-acc-1', name: 'New Account', user_id: 'user-1' });
+    mockCreateCheckpointMutate.mockResolvedValue({ id: 'new-cp-1' });
+    mockRefetchAccounts.mockResolvedValue({ data: mockAccounts });
   });
 
   it('renders nothing when closed', () => {
@@ -106,22 +121,23 @@ describe('CSVImportModal', () => {
     expect(screen.getByText('Download template')).toBeInTheDocument();
   });
 
-  it('shows available accounts', () => {
+  it('shows existing accounts', () => {
     render(
       <CSVImportModal isOpen={true} onClose={vi.fn()} />,
       { wrapper: createWrapper() }
     );
 
-    expect(screen.getByText(/Available accounts:/)).toBeInTheDocument();
+    expect(screen.getByText(/Existing accounts:/)).toBeInTheDocument();
     expect(screen.getByText(/Checking, Savings/)).toBeInTheDocument();
   });
 
-  it('shows message when no accounts exist', async () => {
+  it('shows auto-create message when no accounts exist', async () => {
     const { useAccounts } = await import('@/hooks');
     vi.mocked(useAccounts).mockReturnValue({
       data: [],
       isLoading: false,
-    } as ReturnType<typeof useAccounts>);
+      refetch: vi.fn(),
+    } as unknown as ReturnType<typeof useAccounts>);
 
     render(
       <CSVImportModal isOpen={true} onClose={vi.fn()} />,
@@ -129,7 +145,7 @@ describe('CSVImportModal', () => {
     );
 
     expect(
-      screen.getByText(/You need to create at least one account/)
+      screen.getByText(/New accounts will be created automatically/)
     ).toBeInTheDocument();
   });
 
@@ -180,10 +196,10 @@ describe('CSVImportModal', () => {
     await user.upload(input, file);
 
     await waitFor(() => {
-      expect(screen.getByText('1 valid')).toBeInTheDocument();
+      expect(screen.getByText('1 transaction')).toBeInTheDocument();
     });
 
-    expect(screen.getByText('Valid Transactions')).toBeInTheDocument();
+    expect(screen.getByText('Transactions to Import')).toBeInTheDocument();
     expect(screen.getByText('Salary')).toBeInTheDocument();
     expect(screen.getByText('2024-01-15')).toBeInTheDocument();
   });
@@ -215,10 +231,10 @@ invalid-date,Test,abc,NonExistent,Income,false,,`;
     await user.upload(input, file);
 
     await waitFor(() => {
-      expect(screen.getByText('1 errors')).toBeInTheDocument();
+      expect(screen.getByText(/1 error/)).toBeInTheDocument();
     });
 
-    expect(screen.getByText('Errors')).toBeInTheDocument();
+    expect(screen.getByText(/Errors/)).toBeInTheDocument();
     expect(screen.getByText(/Row 2:/)).toBeInTheDocument();
   });
 
@@ -265,7 +281,7 @@ invalid-date,Test,abc,NonExistent,Income,false,,`;
     await user.upload(input, file);
 
     await waitFor(() => {
-      expect(screen.getByText('1 possible duplicates')).toBeInTheDocument();
+      expect(screen.getByText(/1 possible duplicate/)).toBeInTheDocument();
     });
   });
 
@@ -296,7 +312,7 @@ invalid-date,Test,abc,NonExistent,Income,false,,`;
     await user.upload(input, file);
 
     await waitFor(() => {
-      expect(screen.getByText('1 valid')).toBeInTheDocument();
+      expect(screen.getByText('1 transaction')).toBeInTheDocument();
     });
 
     await user.click(screen.getByRole('button', { name: /Import 1 Transaction/ }));
@@ -343,13 +359,13 @@ invalid-date,Test,abc,NonExistent,Income,false,,`;
     await user.upload(input, file);
 
     await waitFor(() => {
-      expect(screen.getByText('1 valid')).toBeInTheDocument();
+      expect(screen.getByText('1 transaction')).toBeInTheDocument();
     });
 
     await user.click(screen.getByRole('button', { name: /Import 1 Transaction/ }));
 
     await waitFor(() => {
-      expect(screen.getByText(/Successfully imported 1 transaction/)).toBeInTheDocument();
+      expect(screen.getByText('Import Complete!')).toBeInTheDocument();
     });
   });
 
@@ -382,7 +398,7 @@ invalid-date,Test,abc,NonExistent,Income,false,,`;
     await user.upload(input, file);
 
     await waitFor(() => {
-      expect(screen.getByText('1 valid')).toBeInTheDocument();
+      expect(screen.getByText('1 transaction')).toBeInTheDocument();
     });
 
     await user.click(screen.getByRole('button', { name: /Import 1 Transaction/ }));
@@ -419,7 +435,7 @@ invalid-date,Test,abc,NonExistent,Income,false,,`;
     await user.upload(input, file);
 
     await waitFor(() => {
-      expect(screen.getByText('1 valid')).toBeInTheDocument();
+      expect(screen.getByText('1 transaction')).toBeInTheDocument();
     });
 
     await user.click(screen.getByRole('button', { name: 'Choose Different File' }));
@@ -454,10 +470,13 @@ invalid-date,Test,abc,NonExistent,Income,false,,`;
     await user.upload(input, file);
 
     await waitFor(() => {
-      expect(screen.getByText('1 errors')).toBeInTheDocument();
+      expect(screen.getByText(/1 error/)).toBeInTheDocument();
     });
 
-    expect(screen.getByRole('button', { name: /Import 0 Transaction/ })).toBeDisabled();
+    // When there are only errors and no valid transactions, the button should show "Import"
+    // and be disabled since there's nothing to import
+    const importButton = screen.getByRole('button', { name: /Import/ });
+    expect(importButton).toBeDisabled();
   });
 
   it('calls onClose when Done is clicked after success', async () => {
@@ -488,13 +507,13 @@ invalid-date,Test,abc,NonExistent,Income,false,,`;
     await user.upload(input, file);
 
     await waitFor(() => {
-      expect(screen.getByText('1 valid')).toBeInTheDocument();
+      expect(screen.getByText('1 transaction')).toBeInTheDocument();
     });
 
     await user.click(screen.getByRole('button', { name: /Import 1 Transaction/ }));
 
     await waitFor(() => {
-      expect(screen.getByText(/Successfully imported/)).toBeInTheDocument();
+      expect(screen.getByText('Import Complete!')).toBeInTheDocument();
     });
 
     await user.click(screen.getByRole('button', { name: 'Done' }));
@@ -531,7 +550,7 @@ invalid-date,Test,abc,NonExistent,Income,false,,`;
     await user.upload(input, file);
 
     await waitFor(() => {
-      expect(screen.getByText('3 valid')).toBeInTheDocument();
+      expect(screen.getByText('3 transactions')).toBeInTheDocument();
     });
 
     expect(screen.getByRole('button', { name: /Import 3 Transactions/ })).toBeInTheDocument();
