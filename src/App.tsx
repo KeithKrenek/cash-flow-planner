@@ -1,16 +1,10 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
+import { AuthProvider } from '@/context/AuthContext';
+import { AuthGuard } from '@/components/auth';
+import { LoginPage, SignupPage, DashboardPage } from '@/pages';
 
 // Placeholder pages - will be implemented in later phases
-function DashboardPage() {
-  return (
-    <div className="min-h-screen bg-background p-8">
-      <h1 className="text-2xl font-bold text-text-primary">Cash Flow Tracker</h1>
-      <p className="mt-2 text-text-secondary">Dashboard coming soon...</p>
-    </div>
-  );
-}
-
 function TransactionsPage() {
   return (
     <div className="min-h-screen bg-background p-8">
@@ -42,7 +36,7 @@ function NotFoundPage() {
 
 export default function App() {
   return (
-    <>
+    <AuthProvider>
       <Toaster
         position="top-right"
         toastOptions={{
@@ -51,12 +45,47 @@ export default function App() {
         }}
       />
       <Routes>
-        <Route path="/" element={<Navigate to="/dashboard" replace />} />
-        <Route path="/dashboard" element={<DashboardPage />} />
-        <Route path="/transactions" element={<TransactionsPage />} />
-        <Route path="/settings" element={<SettingsPage />} />
+        {/* Public routes */}
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/signup" element={<SignupPage />} />
+
+        {/* Protected routes */}
+        <Route
+          path="/"
+          element={
+            <AuthGuard>
+              <Navigate to="/dashboard" replace />
+            </AuthGuard>
+          }
+        />
+        <Route
+          path="/dashboard"
+          element={
+            <AuthGuard>
+              <DashboardPage />
+            </AuthGuard>
+          }
+        />
+        <Route
+          path="/transactions"
+          element={
+            <AuthGuard>
+              <TransactionsPage />
+            </AuthGuard>
+          }
+        />
+        <Route
+          path="/settings"
+          element={
+            <AuthGuard>
+              <SettingsPage />
+            </AuthGuard>
+          }
+        />
+
+        {/* 404 */}
         <Route path="*" element={<NotFoundPage />} />
       </Routes>
-    </>
+    </AuthProvider>
   );
 }
