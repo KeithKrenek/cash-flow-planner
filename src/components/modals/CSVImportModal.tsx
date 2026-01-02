@@ -170,7 +170,8 @@ export function CSVImportModal({ isOpen, onClose }: CSVImportModalProps) {
             name: accountToCreate.name,
             user_id: user.id,
           });
-          newAccountNameToId.set(accountToCreate.name.toLowerCase(), newAccount.id);
+          // Use originalKey to ensure consistent lookup with __NEW__ placeholders
+          newAccountNameToId.set(accountToCreate.originalKey, newAccount.id);
           summary.accountsCreated++;
         }
 

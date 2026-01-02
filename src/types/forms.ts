@@ -66,6 +66,9 @@ export interface ValidatedCSVTransaction {
 // Account to be created from CSV
 export interface CSVAccountToCreate {
   name: string;
+  // The lowercase key used in __NEW__ placeholders (row.account.toLowerCase().trim())
+  // This ensures consistent lookup when resolving transaction account IDs
+  originalKey: string;
   initialBalance: number | null;
   initialBalanceDate: string | null;
 }

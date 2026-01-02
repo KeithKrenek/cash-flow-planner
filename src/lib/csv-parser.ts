@@ -358,6 +358,7 @@ export function parseCSV(
 
         newAccountsMap.set(accountLower, {
           name: sanitizeAccountName(accountName),
+          originalKey: accountLower, // Store the key used in __NEW__ placeholders
           initialBalance,
           initialBalanceDate: initialBalance !== null ? row.date : null,
         });
@@ -499,14 +500,16 @@ export function generateCSVTemplate(includeInitialBalance: boolean = true): stri
     : CSV_HEADERS;
   const headers = allHeaders.join(',');
 
+  // Note: initial_balance only needs to be specified once per account (on any row)
+  // It creates a checkpoint, not a transaction
   const exampleRows = includeInitialBalance
     ? [
-        '2024-01-01,Opening Balance,0,Checking,,,,,5000.00',
-        '2024-01-01,Opening Balance,0,Savings,,,,,10000.00',
-        '2024-01-15,Salary,3000.00,Checking,Income,true,monthly,,',
+        '2024-01-15,Salary,3000.00,Checking,Income,true,monthly,,5000.00',
         '2024-01-20,Groceries,-150.00,Checking,Food & Dining,false,,,',
         '2024-01-01,Rent,-1500.00,Checking,Housing,true,monthly,2024-12-31,',
         '2024-01-05,"Electric Bill, Gas",-120.00,Checking,Utilities,true,monthly,,',
+        '2024-01-10,Transfer to Savings,-500.00,Checking,Savings,false,,,',
+        '2024-01-10,Transfer from Checking,500.00,Savings,Savings,false,,,10000.00',
       ]
     : [
         '2024-01-15,Salary,3000.00,Checking,Income,true,monthly,',
