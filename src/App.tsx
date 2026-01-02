@@ -2,26 +2,13 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { AuthProvider } from '@/context/AuthContext';
 import { AuthGuard } from '@/components/auth';
-import { LoginPage, SignupPage, DashboardPage } from '@/pages';
-
-// Placeholder pages - will be implemented in later phases
-function TransactionsPage() {
-  return (
-    <div className="min-h-screen bg-background p-8">
-      <h1 className="text-2xl font-bold text-text-primary">Transactions</h1>
-      <p className="mt-2 text-text-secondary">Transaction management coming soon...</p>
-    </div>
-  );
-}
-
-function SettingsPage() {
-  return (
-    <div className="min-h-screen bg-background p-8">
-      <h1 className="text-2xl font-bold text-text-primary">Settings</h1>
-      <p className="mt-2 text-text-secondary">Settings panel coming soon...</p>
-    </div>
-  );
-}
+import {
+  LoginPage,
+  SignupPage,
+  DashboardPage,
+  TransactionsPage,
+  SettingsPage,
+} from '@/pages';
 
 function NotFoundPage() {
   return (

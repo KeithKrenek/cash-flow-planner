@@ -15,7 +15,8 @@
       "Bash(git commit -m \"$\\(cat <<''EOF''\nImplement Phase 3 & 4: Database/API layer and Authentication\n\nPhase 3 - Database & API Layer:\n- Add Supabase client initialization with env validation\n- Create AppError class with error code constants\n- Add handleSupabaseError for PostgrestError conversion\n- Implement accounts API \\(CRUD, nameExists\\)\n- Implement checkpoints API \\(CRUD, getByAccountId, getMostRecentForAccount\\)\n- Implement transactions API \\(CRUD, getRecurring, getForProjection, findDuplicate\\)\n- Implement settings API \\(get, update, warningThreshold\\)\n- Add form validation utilities with XSS sanitization\n- Create Supabase mocks for comprehensive API testing\n\nPhase 4 - Authentication:\n- Create AuthContext with provider and useAuth hook\n- Implement AuthGuard for route protection\n- Add UI components \\(Button, Input, Spinner\\) with variants\n- Create LoginForm and SignupForm components\n- Implement LoginPage and SignupPage with redirects\n- Add DashboardPage placeholder with sign out\n- Update App.tsx with AuthProvider and protected routes\n- Add comprehensive auth component tests \\(398 tests passing\\)\n\n🤖 Generated with [Claude Code]\\(https://claude.com/claude-code\\)\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
       "Bash(git commit:*)",
       "Bash(cat:*)",
-      "Bash(findstr:*)"
+      "Bash(findstr:*)",
+      "Bash(wc:*)"
     ]
   }
 }
