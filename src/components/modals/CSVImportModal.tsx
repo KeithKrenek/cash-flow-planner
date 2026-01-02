@@ -4,6 +4,8 @@ import {
   useAccounts,
   useTransactions,
   useCreateManyTransactions,
+  useCreateAccount,
+  useCreateCheckpoint,
 } from '@/hooks';
 import { useAuth } from '@/context/AuthContext';
 import {
@@ -11,9 +13,10 @@ import {
   generateCSVTemplate,
   validateFileSize,
   readFileAsText,
+  resolveAccountIds,
 } from '@/lib/csv-parser';
 import { MAX_CSV_FILE_SIZE } from '@/lib/constants';
-import type { CSVParseResult } from '@/types';
+import type { CSVParseResult, DbAccount } from '@/types';
 
 export interface CSVImportModalProps {
   isOpen: boolean;
@@ -22,25 +25,35 @@ export interface CSVImportModalProps {
 
 type ImportState = 'idle' | 'parsing' | 'preview' | 'importing' | 'success' | 'error';
 
+interface ImportSummary {
+  accountsCreated: number;
+  checkpointsCreated: number;
+  transactionsImported: number;
+}
+
 export function CSVImportModal({ isOpen, onClose }: CSVImportModalProps) {
   const { user } = useAuth();
-  const { data: accounts = [], isLoading: accountsLoading } = useAccounts();
+  const { data: accounts = [], isLoading: accountsLoading, refetch: refetchAccounts } = useAccounts();
   const { data: existingTransactions = [], isLoading: transactionsLoading } = useTransactions();
   const createManyTransactions = useCreateManyTransactions();
+  const createAccount = useCreateAccount();
+  const createCheckpoint = useCreateCheckpoint();
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [state, setState] = useState<ImportState>('idle');
   const [parseResult, setParseResult] = useState<CSVParseResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
-  const [importCount, setImportCount] = useState(0);
+  const [importSummary, setImportSummary] = useState<ImportSummary | null>(null);
+  const [importProgress, setImportProgress] = useState<string>('');
 
   const resetState = useCallback(() => {
     setState('idle');
     setParseResult(null);
     setError(null);
     setIsDragOver(false);
-    setImportCount(0);
+    setImportSummary(null);
+    setImportProgress('');
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -71,7 +84,10 @@ export function CSVImportModal({ isOpen, onClose }: CSVImportModalProps) {
 
     try {
       const text = await readFileAsText(file);
-      const result = parseCSV(text, accounts, user.id, existingTransactions);
+      // Parse with allowNewAccounts=true to support auto-creation
+      const result = parseCSV(text, accounts, user.id, existingTransactions, {
+        allowNewAccounts: true,
+      });
       setParseResult(result);
       setState('preview');
     } catch (err) {
@@ -108,7 +124,7 @@ export function CSVImportModal({ isOpen, onClose }: CSVImportModalProps) {
   };
 
   const handleDownloadTemplate = () => {
-    const template = generateCSVTemplate();
+    const template = generateCSVTemplate(true);
     const blob = new Blob([template], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -121,29 +137,109 @@ export function CSVImportModal({ isOpen, onClose }: CSVImportModalProps) {
   };
 
   const handleImport = async () => {
-    if (!parseResult || parseResult.valid.length === 0) return;
+    if (!parseResult || !user) return;
+
+    // Check if there's anything to import
+    const hasAccountsToCreate = parseResult.accountsToCreate.length > 0;
+    const hasCheckpointsToCreate = parseResult.checkpointsToCreate.length > 0;
+    const hasTransactions = parseResult.valid.length > 0;
+
+    if (!hasAccountsToCreate && !hasCheckpointsToCreate && !hasTransactions) {
+      setError('Nothing to import');
+      return;
+    }
 
     setState('importing');
 
     try {
-      // Convert to TransactionInsert format (they're already validated)
-      const transactionsToInsert = parseResult.valid.map((tx) => ({
-        user_id: tx.user_id,
-        account_id: tx.account_id,
-        description: tx.description,
-        amount: tx.amount,
-        category: tx.category,
-        date: tx.date,
-        is_recurring: tx.is_recurring,
-        recurrence_rule: tx.recurrence_rule,
-        end_date: tx.end_date,
-      }));
+      const summary: ImportSummary = {
+        accountsCreated: 0,
+        checkpointsCreated: 0,
+        transactionsImported: 0,
+      };
 
-      await createManyTransactions.mutateAsync(transactionsToInsert);
-      setImportCount(transactionsToInsert.length);
+      // Map to track new account names to their created IDs
+      const newAccountNameToId = new Map<string, string>();
+
+      // Step 1: Create new accounts
+      if (hasAccountsToCreate) {
+        setImportProgress(`Creating ${parseResult.accountsToCreate.length} account(s)...`);
+
+        for (const accountToCreate of parseResult.accountsToCreate) {
+          const newAccount = await createAccount.mutateAsync({
+            name: accountToCreate.name,
+            user_id: user.id,
+          });
+          newAccountNameToId.set(accountToCreate.name.toLowerCase(), newAccount.id);
+          summary.accountsCreated++;
+        }
+
+        // Refetch accounts to get fresh data
+        await refetchAccounts();
+      }
+
+      // Build complete account map (existing + new)
+      const allAccountsMap = new Map<string, string>();
+      accounts.forEach((acc: DbAccount) => {
+        allAccountsMap.set(acc.name.toLowerCase(), acc.id);
+      });
+      newAccountNameToId.forEach((id, name) => {
+        allAccountsMap.set(name, id);
+      });
+
+      // Step 2: Create checkpoints for initial balances
+      if (hasCheckpointsToCreate) {
+        setImportProgress(`Creating ${parseResult.checkpointsToCreate.length} initial balance(s)...`);
+
+        for (const checkpointToCreate of parseResult.checkpointsToCreate) {
+          const accountId = allAccountsMap.get(checkpointToCreate.accountName.toLowerCase());
+          if (accountId) {
+            await createCheckpoint.mutateAsync({
+              account_id: accountId,
+              user_id: user.id,
+              date: checkpointToCreate.date,
+              amount: checkpointToCreate.amount,
+              notes: 'Initial balance from CSV import',
+            });
+            summary.checkpointsCreated++;
+          }
+        }
+      }
+
+      // Step 3: Import transactions
+      if (hasTransactions) {
+        setImportProgress(`Importing ${parseResult.valid.length} transaction(s)...`);
+
+        // Resolve placeholder account IDs
+        const resolvedTransactions = resolveAccountIds(parseResult.valid, allAccountsMap);
+
+        // Filter out any transactions with unresolved accounts (shouldn't happen, but safety check)
+        const validTransactions = resolvedTransactions.filter(
+          (tx) => !tx.account_id.startsWith('__NEW__')
+        );
+
+        if (validTransactions.length > 0) {
+          const transactionsToInsert = validTransactions.map((tx) => ({
+            user_id: tx.user_id,
+            account_id: tx.account_id,
+            description: tx.description,
+            amount: tx.amount,
+            category: tx.category,
+            date: tx.date,
+            is_recurring: tx.is_recurring,
+            recurrence_rule: tx.recurrence_rule,
+            end_date: tx.end_date,
+          }));
+
+          await createManyTransactions.mutateAsync(transactionsToInsert);
+          summary.transactionsImported = transactionsToInsert.length;
+        }
+      }
+
+      setImportSummary(summary);
       setState('success');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to import transactions');
+      setError(err instanceof Error ? err.message : 'Failed to import');
       setState('error');
     }
   };
@@ -161,16 +257,11 @@ export function CSVImportModal({ isOpen, onClose }: CSVImportModalProps) {
     );
   }
 
-  // Render no accounts state
-  if (accounts.length === 0) {
-    return (
-      <Modal isOpen={isOpen} onClose={handleClose} title="Import CSV" size="lg">
-        <p className="text-text-muted text-center py-4">
-          You need to create at least one account before importing transactions.
-        </p>
-      </Modal>
-    );
-  }
+  // Calculate what will be imported (for preview)
+  const hasNewAccounts = parseResult && parseResult.accountsToCreate.length > 0;
+  const hasCheckpoints = parseResult && parseResult.checkpointsToCreate.length > 0;
+  const hasValidTransactions = parseResult && parseResult.valid.length > 0;
+  const canImport = hasNewAccounts || hasCheckpoints || hasValidTransactions;
 
   return (
     <Modal isOpen={isOpen} onClose={handleClose} title="Import CSV" size="lg">
@@ -225,6 +316,10 @@ export function CSVImportModal({ isOpen, onClose }: CSVImportModalProps) {
               <p className="mt-2 text-sm text-text-muted">
                 Maximum file size: {MAX_CSV_FILE_SIZE / 1024}KB
               </p>
+
+              <p className="mt-2 text-xs text-text-secondary">
+                New accounts will be created automatically from your CSV
+              </p>
             </div>
 
             <div className="flex justify-between items-center">
@@ -236,9 +331,11 @@ export function CSVImportModal({ isOpen, onClose }: CSVImportModalProps) {
                 Download template
               </button>
 
-              <div className="text-sm text-text-muted">
-                Available accounts: {accounts.map((a) => a.name).join(', ')}
-              </div>
+              {accounts.length > 0 && (
+                <div className="text-sm text-text-muted">
+                  Existing accounts: {accounts.map((a: DbAccount) => a.name).join(', ')}
+                </div>
+              )}
             </div>
           </>
         )}
@@ -255,9 +352,26 @@ export function CSVImportModal({ isOpen, onClose }: CSVImportModalProps) {
         {state === 'preview' && parseResult && (
           <>
             <div className="space-y-3">
-              {/* Summary */}
-              <div className="flex gap-4 text-sm">
-                <Badge variant="success">{parseResult.valid.length} valid</Badge>
+              {/* Summary badges */}
+              <div className="flex flex-wrap gap-2 text-sm">
+                {hasNewAccounts && (
+                  <Badge variant="info">
+                    {parseResult.accountsToCreate.length} new account
+                    {parseResult.accountsToCreate.length !== 1 ? 's' : ''}
+                  </Badge>
+                )}
+                {hasCheckpoints && (
+                  <Badge variant="info">
+                    {parseResult.checkpointsToCreate.length} initial balance
+                    {parseResult.checkpointsToCreate.length !== 1 ? 's' : ''}
+                  </Badge>
+                )}
+                {hasValidTransactions && (
+                  <Badge variant="success">
+                    {parseResult.valid.length} transaction
+                    {parseResult.valid.length !== 1 ? 's' : ''}
+                  </Badge>
+                )}
                 {parseResult.errors.length > 0 && (
                   <Badge variant="danger">{parseResult.errors.length} errors</Badge>
                 )}
@@ -268,12 +382,35 @@ export function CSVImportModal({ isOpen, onClose }: CSVImportModalProps) {
                 )}
               </div>
 
+              {/* New accounts preview */}
+              {hasNewAccounts && (
+                <div className="border border-accent/50 rounded-lg overflow-hidden">
+                  <div className="bg-accent/10 px-3 py-2 border-b border-accent/50">
+                    <span className="text-sm font-medium text-accent">
+                      New Accounts to Create
+                    </span>
+                  </div>
+                  <div className="p-3 space-y-1">
+                    {parseResult.accountsToCreate.map((acc, i) => (
+                      <div key={i} className="text-sm flex justify-between">
+                        <span className="text-text-primary">{acc.name}</span>
+                        {acc.initialBalance !== null && (
+                          <span className="text-text-secondary">
+                            Initial: ${acc.initialBalance.toFixed(2)}
+                          </span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Valid transactions preview */}
-              {parseResult.valid.length > 0 && (
+              {hasValidTransactions && (
                 <div className="border border-border rounded-lg overflow-hidden">
                   <div className="bg-surface-secondary px-3 py-2 border-b border-border">
                     <span className="text-sm font-medium text-text-primary">
-                      Valid Transactions
+                      Transactions to Import
                     </span>
                   </div>
                   <div className="max-h-40 overflow-y-auto">
@@ -317,7 +454,7 @@ export function CSVImportModal({ isOpen, onClose }: CSVImportModalProps) {
               {parseResult.errors.length > 0 && (
                 <div className="border border-danger/50 rounded-lg overflow-hidden">
                   <div className="bg-danger/10 px-3 py-2 border-b border-danger/50">
-                    <span className="text-sm font-medium text-danger">Errors</span>
+                    <span className="text-sm font-medium text-danger">Errors (rows skipped)</span>
                   </div>
                   <div className="max-h-40 overflow-y-auto p-3 space-y-2">
                     {parseResult.errors.map((err, i) => (
@@ -353,12 +490,10 @@ export function CSVImportModal({ isOpen, onClose }: CSVImportModalProps) {
               <Button variant="secondary" onClick={resetState}>
                 Choose Different File
               </Button>
-              <Button
-                onClick={handleImport}
-                disabled={parseResult.valid.length === 0}
-              >
-                Import {parseResult.valid.length} Transaction
-                {parseResult.valid.length !== 1 ? 's' : ''}
+              <Button onClick={handleImport} disabled={!canImport}>
+                {hasNewAccounts
+                  ? `Create ${parseResult.accountsToCreate.length} Account${parseResult.accountsToCreate.length !== 1 ? 's' : ''} & Import`
+                  : `Import ${parseResult.valid.length} Transaction${parseResult.valid.length !== 1 ? 's' : ''}`}
               </Button>
             </div>
           </>
@@ -368,12 +503,12 @@ export function CSVImportModal({ isOpen, onClose }: CSVImportModalProps) {
         {state === 'importing' && (
           <div className="flex flex-col items-center py-8">
             <Spinner />
-            <p className="mt-4 text-text-muted">Importing transactions...</p>
+            <p className="mt-4 text-text-muted">{importProgress || 'Importing...'}</p>
           </div>
         )}
 
         {/* Success state */}
-        {state === 'success' && (
+        {state === 'success' && importSummary && (
           <div className="text-center py-8">
             <svg
               className="mx-auto h-12 w-12 text-success"
@@ -388,10 +523,27 @@ export function CSVImportModal({ isOpen, onClose }: CSVImportModalProps) {
                 d="M5 13l4 4L19 7"
               />
             </svg>
-            <p className="mt-4 text-text-primary">
-              Successfully imported {importCount} transaction
-              {importCount !== 1 ? 's' : ''}!
-            </p>
+            <p className="mt-4 text-text-primary font-medium">Import Complete!</p>
+            <div className="mt-2 text-sm text-text-secondary space-y-1">
+              {importSummary.accountsCreated > 0 && (
+                <p>
+                  Created {importSummary.accountsCreated} account
+                  {importSummary.accountsCreated !== 1 ? 's' : ''}
+                </p>
+              )}
+              {importSummary.checkpointsCreated > 0 && (
+                <p>
+                  Set {importSummary.checkpointsCreated} initial balance
+                  {importSummary.checkpointsCreated !== 1 ? 's' : ''}
+                </p>
+              )}
+              {importSummary.transactionsImported > 0 && (
+                <p>
+                  Imported {importSummary.transactionsImported} transaction
+                  {importSummary.transactionsImported !== 1 ? 's' : ''}
+                </p>
+              )}
+            </div>
             <div className="mt-4">
               <Button onClick={handleClose}>Done</Button>
             </div>

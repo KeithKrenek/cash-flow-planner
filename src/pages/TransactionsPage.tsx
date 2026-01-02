@@ -6,6 +6,7 @@ import { Button, Spinner } from '@/components/ui';
 import {
   AddTransactionModal,
   AddCheckpointModal,
+  AddAccountModal,
   CSVImportModal,
   ConfirmDeleteModal,
 } from '@/components/modals';
@@ -20,7 +21,7 @@ import {
 } from '@/hooks';
 import type { TableEntry, DbTransaction, DbBalanceCheckpoint } from '@/types';
 
-type ModalType = 'transaction' | 'checkpoint' | 'csv' | 'delete' | null;
+type ModalType = 'transaction' | 'checkpoint' | 'account' | 'csv' | 'delete' | null;
 
 export function TransactionsPage() {
   const [activeModal, setActiveModal] = useState<ModalType>(null);
@@ -203,16 +204,70 @@ export function TransactionsPage() {
     return (
       <PageLayout>
         <div className="text-center py-16">
-          <h2 className="text-xl font-semibold text-text-primary mb-2">
+          <svg
+            className="mx-auto h-12 w-12 text-text-muted"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={1.5}
+              d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"
+            />
+          </svg>
+          <h2 className="mt-4 text-xl font-semibold text-text-primary">
             No Accounts Yet
           </h2>
-          <p className="text-text-secondary mb-6">
+          <p className="mt-2 text-text-secondary">
             Create an account first to start managing transactions.
           </p>
-          <p className="text-text-muted text-sm">
-            Go to the Dashboard to create your first account.
-          </p>
+          <div className="mt-6 flex flex-col sm:flex-row gap-3 justify-center">
+            <Button onClick={() => setActiveModal('account')}>
+              <svg
+                className="w-4 h-4 mr-2"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M12 4v16m8-8H4"
+                />
+              </svg>
+              Add Your First Account
+            </Button>
+            <Button variant="secondary" onClick={() => setActiveModal('csv')}>
+              <svg
+                className="w-4 h-4 mr-2"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
+                />
+              </svg>
+              Import from CSV
+            </Button>
+          </div>
         </div>
+
+        {/* Modals still needed for empty state actions */}
+        <AddAccountModal
+          isOpen={activeModal === 'account'}
+          onClose={closeModal}
+        />
+        <CSVImportModal
+          isOpen={activeModal === 'csv'}
+          onClose={closeModal}
+        />
       </PageLayout>
     );
   }
@@ -249,6 +304,25 @@ export function TransactionsPage() {
                 />
               </svg>
               Import CSV
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={() => setActiveModal('account')}
+            >
+              <svg
+                className="w-4 h-4 mr-2"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"
+                />
+              </svg>
+              Add Account
             </Button>
             <Button
               variant="secondary"
@@ -325,6 +399,11 @@ export function TransactionsPage() {
       {/* Modals */}
       <AddTransactionModal
         isOpen={activeModal === 'transaction'}
+        onClose={closeModal}
+      />
+
+      <AddAccountModal
+        isOpen={activeModal === 'account'}
         onClose={closeModal}
       />
 

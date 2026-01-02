@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/Button';
 const navLinks = [
   { to: '/dashboard', label: 'Dashboard' },
   { to: '/transactions', label: 'Transactions' },
+  { to: '/settings', label: 'Settings' },
 ];
 
 export function Header() {

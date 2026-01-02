@@ -16,7 +16,8 @@
       "Bash(git commit:*)",
       "Bash(cat:*)",
       "Bash(findstr:*)",
-      "Bash(wc:*)"
+      "Bash(wc:*)",
+      "Bash(dir /s /b \"c:\\\\Users\\\\keith\\\\OneDrive\\\\Desktop\\\\CODE\\\\cash-flow-planner\\\\src\")"
     ]
   }
 }

@@ -47,6 +47,7 @@ export interface CSVRow {
   is_recurring: string;
   frequency: string;
   end_date: string;
+  initial_balance: string; // Optional: for setting account opening balance
 }
 
 // Validated transaction ready for insertion (user_id added by parser)
@@ -62,6 +63,20 @@ export interface ValidatedCSVTransaction {
   end_date: string | null;
 }
 
+// Account to be created from CSV
+export interface CSVAccountToCreate {
+  name: string;
+  initialBalance: number | null;
+  initialBalanceDate: string | null;
+}
+
+// Checkpoint to be created from CSV (for initial balances)
+export interface CSVCheckpointToCreate {
+  accountName: string; // Resolved to account_id after account creation
+  date: string;
+  amount: number;
+}
+
 export interface CSVParseResult {
   valid: ValidatedCSVTransaction[];
   errors: Array<{
@@ -75,4 +90,8 @@ export interface CSVParseResult {
     existingId: string;
     message: string;
   }>;
+  // New accounts that need to be created
+  accountsToCreate: CSVAccountToCreate[];
+  // Checkpoints to create for initial balances
+  checkpointsToCreate: CSVCheckpointToCreate[];
 }

@@ -114,7 +114,7 @@ export const DEBOUNCE_DELAY = 500;
 // Maximum iterations for recurrence expansion (safety limit)
 export const MAX_RECURRENCE_ITERATIONS = 1000;
 
-// CSV column headers
+// CSV column headers (required)
 export const CSV_HEADERS = [
   'date',
   'description',
@@ -125,6 +125,9 @@ export const CSV_HEADERS = [
   'frequency',
   'end_date',
 ] as const;
+
+// Optional CSV column for initial balances
+export const CSV_OPTIONAL_HEADERS = ['initial_balance'] as const;
 
 // Max file size for CSV import (1MB)
 export const MAX_CSV_FILE_SIZE = 1024 * 1024;

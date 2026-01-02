@@ -6,10 +6,14 @@ import { CashFlowChart } from './CashFlowChart';
 import { TimeRangeSelector } from './TimeRangeSelector';
 import { AccountLegend } from './AccountLegend';
 import { WarningBanner } from './WarningBanner';
-import { Spinner } from '@/components/ui/Spinner';
+import { Spinner, Button } from '@/components/ui';
+import { AddAccountModal, AddCheckpointModal } from '@/components/modals';
+
+type ModalType = 'account' | 'checkpoint' | null;
 
 export function Dashboard() {
   const [timeRange, setTimeRange] = useState<TimeRangeDays>(DEFAULT_TIME_RANGE);
+  const [activeModal, setActiveModal] = useState<ModalType>(null);
   const { data: settings } = useSettings();
   const warningThreshold = settings?.warning_threshold ?? DEFAULT_WARNING_THRESHOLD;
 
@@ -50,6 +54,8 @@ export function Dashboard() {
     projection?.dataPoints[0]?.balances ?? {};
   const currentTotal = projection?.dataPoints[0]?.total ?? 0;
 
+  const closeModal = () => setActiveModal(null);
+
   return (
     <div className="space-y-6">
       {/* Warnings */}
@@ -63,11 +69,31 @@ export function Dashboard() {
           <h2 className="text-lg font-semibold text-text-primary">
             Cash Flow Projection
           </h2>
-          <TimeRangeSelector value={timeRange} onChange={setTimeRange} />
+          <div className="flex items-center gap-2">
+            {hasAccounts && (
+              <>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setActiveModal('checkpoint')}
+                >
+                  Add Checkpoint
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setActiveModal('account')}
+                >
+                  Add Account
+                </Button>
+              </>
+            )}
+            <TimeRangeSelector value={timeRange} onChange={setTimeRange} />
+          </div>
         </div>
 
         {!hasAccounts ? (
-          <EmptyState />
+          <EmptyState onAddAccount={() => setActiveModal('account')} />
         ) : (
           <>
             {/* Legend with current balances */}
@@ -122,11 +148,19 @@ export function Dashboard() {
           />
         </div>
       )}
+
+      {/* Modals */}
+      <AddAccountModal isOpen={activeModal === 'account'} onClose={closeModal} />
+      <AddCheckpointModal isOpen={activeModal === 'checkpoint'} onClose={closeModal} />
     </div>
   );
 }
 
-function EmptyState() {
+interface EmptyStateProps {
+  onAddAccount: () => void;
+}
+
+function EmptyState({ onAddAccount }: EmptyStateProps) {
   return (
     <div className="text-center py-12">
       <svg
@@ -146,6 +180,24 @@ function EmptyState() {
       <p className="mt-1 text-sm text-text-secondary">
         Create an account and add a balance checkpoint to get started.
       </p>
+      <div className="mt-6">
+        <Button onClick={onAddAccount}>
+          <svg
+            className="w-4 h-4 mr-2"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M12 4v16m8-8H4"
+            />
+          </svg>
+          Add Your First Account
+        </Button>
+      </div>
     </div>
   );
 }
