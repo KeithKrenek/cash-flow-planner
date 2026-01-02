@@ -13,7 +13,7 @@ import {
   readFileAsText,
 } from '@/lib/csv-parser';
 import { MAX_CSV_FILE_SIZE } from '@/lib/constants';
-import type { CSVParseResult, ValidatedCSVTransaction } from '@/types';
+import type { CSVParseResult } from '@/types';
 
 export interface CSVImportModalProps {
   isOpen: boolean;

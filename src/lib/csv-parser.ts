@@ -50,7 +50,7 @@ export function parseCSVLine(line: string): string[] {
 export function validateRow(
   row: CSVRow,
   accountMap: Map<string, string>,
-  rowNumber: number
+  _rowNumber: number
 ): string[] {
   const errors: string[] = [];
 
