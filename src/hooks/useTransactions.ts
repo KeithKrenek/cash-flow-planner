@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { transactionsApi } from '@/api/transactions';
-import type { TransactionInsert, TransactionUpdate } from '@/types';
+import type { DbTransaction, TransactionInsert, TransactionUpdate } from '@/types';
 
 export const transactionKeys = {
   all: ['transactions'] as const,
@@ -75,12 +75,48 @@ export function useUpdateTransaction() {
   return useMutation({
     mutationFn: ({ id, updates }: { id: string; updates: TransactionUpdate }) =>
       transactionsApi.update(id, updates),
+
+    onMutate: async ({ id, updates }) => {
+      // Cancel any outgoing refetches to avoid overwriting optimistic update
+      await queryClient.cancelQueries({ queryKey: transactionKeys.all });
+
+      // Snapshot the previous value for rollback
+      const previousTransactions = queryClient.getQueryData<DbTransaction[]>(
+        transactionKeys.all
+      );
+
+      // Optimistically update the cache
+      if (previousTransactions) {
+        queryClient.setQueryData<DbTransaction[]>(
+          transactionKeys.all,
+          previousTransactions.map((tx) =>
+            tx.id === id ? { ...tx, ...updates } : tx
+          )
+        );
+      }
+
+      return { previousTransactions };
+    },
+
+    onError: (_err, _vars, context) => {
+      // Rollback to the previous value on error
+      if (context?.previousTransactions) {
+        queryClient.setQueryData(transactionKeys.all, context.previousTransactions);
+      }
+    },
+
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: transactionKeys.all });
       queryClient.setQueryData(transactionKeys.detail(data.id), data);
-      queryClient.invalidateQueries({
-        queryKey: transactionKeys.byAccount(data.account_id),
-      });
+    },
+
+    onSettled: (data) => {
+      // Always refetch after error or success to ensure server state
+      queryClient.invalidateQueries({ queryKey: transactionKeys.all });
+      if (data) {
+        queryClient.invalidateQueries({
+          queryKey: transactionKeys.byAccount(data.account_id),
+        });
+      }
       queryClient.invalidateQueries({ queryKey: transactionKeys.recurring });
     },
   });

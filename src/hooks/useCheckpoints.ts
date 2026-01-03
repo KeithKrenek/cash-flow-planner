@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { checkpointsApi } from '@/api/checkpoints';
-import type { CheckpointInsert, CheckpointUpdate } from '@/types';
+import type { DbBalanceCheckpoint, CheckpointInsert, CheckpointUpdate } from '@/types';
 
 export const checkpointKeys = {
   all: ['checkpoints'] as const,
@@ -51,12 +51,48 @@ export function useUpdateCheckpoint() {
   return useMutation({
     mutationFn: ({ id, updates }: { id: string; updates: CheckpointUpdate }) =>
       checkpointsApi.update(id, updates),
+
+    onMutate: async ({ id, updates }) => {
+      // Cancel any outgoing refetches to avoid overwriting optimistic update
+      await queryClient.cancelQueries({ queryKey: checkpointKeys.all });
+
+      // Snapshot the previous value for rollback
+      const previousCheckpoints = queryClient.getQueryData<DbBalanceCheckpoint[]>(
+        checkpointKeys.all
+      );
+
+      // Optimistically update the cache
+      if (previousCheckpoints) {
+        queryClient.setQueryData<DbBalanceCheckpoint[]>(
+          checkpointKeys.all,
+          previousCheckpoints.map((cp) =>
+            cp.id === id ? { ...cp, ...updates } : cp
+          )
+        );
+      }
+
+      return { previousCheckpoints };
+    },
+
+    onError: (_err, _vars, context) => {
+      // Rollback to the previous value on error
+      if (context?.previousCheckpoints) {
+        queryClient.setQueryData(checkpointKeys.all, context.previousCheckpoints);
+      }
+    },
+
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: checkpointKeys.all });
       queryClient.setQueryData(checkpointKeys.detail(data.id), data);
-      queryClient.invalidateQueries({
-        queryKey: checkpointKeys.byAccount(data.account_id),
-      });
+    },
+
+    onSettled: (data) => {
+      // Always refetch after error or success to ensure server state
+      queryClient.invalidateQueries({ queryKey: checkpointKeys.all });
+      if (data) {
+        queryClient.invalidateQueries({
+          queryKey: checkpointKeys.byAccount(data.account_id),
+        });
+      }
     },
   });
 }

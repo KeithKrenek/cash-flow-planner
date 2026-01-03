@@ -1,7 +1,7 @@
-import { useState, useRef, useEffect, type KeyboardEvent } from 'react';
+import { useState, useRef, useEffect, type KeyboardEvent, type MouseEvent as ReactMouseEvent } from 'react';
 import { cn } from '@/lib/utils';
 import { formatDisplayDate, safeSetDate } from '@/lib/date-utils';
-import { getDaysInMonth, format, addMonths, subMonths } from 'date-fns';
+import { getDaysInMonth, format, addMonths, subMonths, addDays } from 'date-fns';
 
 export interface DateCellProps {
   value: Date;
@@ -21,6 +21,7 @@ export function DateCell({
   const [isOpen, setIsOpen] = useState(false);
   const [viewMode, setViewMode] = useState<'calendar' | 'day'>('calendar');
   const [viewDate, setViewDate] = useState(value);
+  const [isHovered, setIsHovered] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const dayInputRef = useRef<HTMLInputElement>(null);
   const [dayInputValue, setDayInputValue] = useState(value.getDate().toString());
@@ -77,6 +78,13 @@ export function DateCell({
     onChange(newDate);
   };
 
+  // Increment/decrement day by a delta (for stepper buttons and keyboard shortcuts)
+  const incrementDay = (delta: number, e?: ReactMouseEvent) => {
+    e?.stopPropagation();
+    const newDate = addDays(value, delta);
+    onChange(newDate);
+  };
+
   const handleDayInputSubmit = () => {
     const day = parseInt(dayInputValue, 10);
     if (!isNaN(day) && day >= 1 && day <= 31) {
@@ -101,9 +109,37 @@ export function DateCell({
   };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
-    if (e.key === 'Enter' || e.key === ' ') {
-      e.preventDefault();
-      handleToggle();
+    if (disabled) return;
+
+    if (!isOpen) {
+      // Quick keyboard shortcuts when dropdown is closed
+      switch (e.key) {
+        case 'ArrowUp':
+          e.preventDefault();
+          // Shift+Up = +7 days (week), Up = +1 day
+          onChange(addDays(value, e.shiftKey ? 7 : 1));
+          break;
+        case 'ArrowDown':
+          e.preventDefault();
+          // Shift+Down = -7 days (week), Down = -1 day
+          onChange(addDays(value, e.shiftKey ? -7 : -1));
+          break;
+        case 'PageUp':
+          e.preventDefault();
+          // PageUp = +1 month
+          onChange(addMonths(value, 1));
+          break;
+        case 'PageDown':
+          e.preventDefault();
+          // PageDown = -1 month
+          onChange(subMonths(value, 1));
+          break;
+        case 'Enter':
+        case ' ':
+          e.preventDefault();
+          handleToggle();
+          break;
+      }
     } else if (e.key === 'Escape') {
       setIsOpen(false);
       setViewMode('calendar');
@@ -183,6 +219,8 @@ export function DateCell({
       <div
         onClick={handleToggle}
         onKeyDown={handleKeyDown}
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
         className={cn(
           'px-2 py-1 text-sm rounded cursor-pointer min-h-[28px] font-tabular',
           'hover:bg-surface-hover transition-colors',
@@ -194,7 +232,31 @@ export function DateCell({
         role="button"
         tabIndex={disabled ? -1 : 0}
       >
-        <span>{formatDisplayDate(value)}</span>
+        <span className="flex-grow">{formatDisplayDate(value)}</span>
+
+        {/* Stepper buttons - appear on hover */}
+        {!disabled && isHovered && !isOpen && (
+          <div className="flex items-center gap-0.5">
+            <button
+              type="button"
+              onClick={(e) => incrementDay(-1, e)}
+              className="w-5 h-5 flex items-center justify-center rounded hover:bg-border text-text-muted hover:text-text-primary transition-colors text-xs font-medium"
+              aria-label="Previous day"
+            >
+              −
+            </button>
+            <button
+              type="button"
+              onClick={(e) => incrementDay(1, e)}
+              className="w-5 h-5 flex items-center justify-center rounded hover:bg-border text-text-muted hover:text-text-primary transition-colors text-xs font-medium"
+              aria-label="Next day"
+            >
+              +
+            </button>
+          </div>
+        )}
+
+        {/* Calendar icon */}
         {!disabled && (
           <svg
             className="w-3 h-3 text-text-muted flex-shrink-0"
@@ -248,7 +310,48 @@ export function DateCell({
               {renderCalendar()}
 
               {/* Quick actions */}
-              <div className="mt-3 pt-3 border-t border-border">
+              <div className="mt-3 pt-3 border-t border-border space-y-2">
+                {/* Quick day buttons */}
+                <div className="flex flex-wrap gap-1">
+                  {[1, 5, 10, 15, 20, 25].map((day) => (
+                    <button
+                      key={day}
+                      type="button"
+                      onClick={() => {
+                        handleDayChange(day);
+                        setIsOpen(false);
+                        onBlur?.();
+                      }}
+                      className={cn(
+                        'px-2 py-0.5 text-xs rounded transition-colors',
+                        value.getDate() === day
+                          ? 'bg-accent text-white'
+                          : 'bg-surface-hover hover:bg-border'
+                      )}
+                    >
+                      {day}
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const lastDay = getDaysInMonth(value);
+                      handleDayChange(lastDay);
+                      setIsOpen(false);
+                      onBlur?.();
+                    }}
+                    className={cn(
+                      'px-2 py-0.5 text-xs rounded transition-colors',
+                      value.getDate() === getDaysInMonth(value)
+                        ? 'bg-accent text-white'
+                        : 'bg-surface-hover hover:bg-border'
+                    )}
+                  >
+                    Last
+                  </button>
+                </div>
+
+                {/* Today and Edit day only buttons */}
                 <div className="flex items-center justify-between gap-2">
                   <button
                     type="button"
